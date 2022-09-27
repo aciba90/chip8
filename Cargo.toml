@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 
 [dependencies.sdl2]
-version = "*"
+version = "0.35.*"
 features = ["bundled"]

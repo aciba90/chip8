@@ -1,5 +1,5 @@
-use chip8::*;
+use chip8::exec_chip8;
 
 pub fn main() {
-    exec_sdl();
+    exec_chip8();
 }

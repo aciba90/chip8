@@ -1,6 +1,7 @@
+use crate::constants::{HEIGHT, WIDTH};
 use crate::utils;
-const WIDTH: usize = 64;
-const HEIGHT: usize = 32;
+
+use std::fs;
 
 const FONTS: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -65,8 +66,10 @@ impl Default for Cpu {
 }
 
 impl Cpu {
-    pub fn init(&mut self) {
+    pub fn init(&mut self, filename: &str) {
         self.load_fonts();
+        let rom: Vec<u8> = fs::read(filename).expect("No file found");
+        self.load_program(rom);
     }
 
     /// Load fonts in RAM (from 0x000 to 0x1FF)
