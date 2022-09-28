@@ -7,23 +7,23 @@ build:
 
 .PHONY: test
 test:
-	cargo build
+	cargo test
 
-.PHONY: clean
+.PHONY: lint
 lint: clippy fmt
 
-.PHONY: clean
+.PHONY: clippy
 clippy:
 	cargo clippy
 
-.PHONY: clean
+.PHONY: fmt
 fmt:
 	cargo fmt --check
 
-.PHONY: clean
+.PHONY: do_fmt
 do_fmt:
 	cargo fmt
 
 .PHONY: clean
 clean:
-	rm -rf target
+	cargo clean

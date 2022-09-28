@@ -3,15 +3,11 @@ extern crate sdl2;
 use crate::constants::{HEIGHT, WIDTH};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::render::Canvas;
-use sdl2::{pixels::Color, video::Window};
-use sdl2::{EventPump, Sdl, VideoSubsystem};
+use sdl2::pixels::Color;
 
 pub struct Screen {
-    sdl_context: Sdl,
-    video_subsystem: VideoSubsystem,
-    canvas: Canvas<Window>,
-    event_pump: EventPump,
+    canvas: sdl2::render::Canvas<sdl2::video::Window>,
+    event_pump: sdl2::EventPump,
     pub running: bool,
     scale: usize,
 }
@@ -22,11 +18,7 @@ impl Screen {
         let video_subsystem = sdl_context.video().unwrap();
 
         let window = video_subsystem
-            .window(
-                "rust-sdl2 demo",  // XXX
-                (scale * WIDTH) as u32,
-                (scale * HEIGHT) as u32,
-            )
+            .window("CHIP8", (scale * WIDTH) as u32, (scale * HEIGHT) as u32)
             .position_centered()
             .build()
             .unwrap();
@@ -39,8 +31,6 @@ impl Screen {
         let event_pump = sdl_context.event_pump().unwrap();
 
         Screen {
-            sdl_context,
-            video_subsystem,
             canvas,
             event_pump,
             running: true,
@@ -58,7 +48,6 @@ impl Screen {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => {
-                    // break 'running
                     println!("Quitting...");
                     self.running = false;
                 }

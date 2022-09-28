@@ -1,8 +1,6 @@
 use crate::constants::{HEIGHT, WIDTH};
 use crate::utils;
 
-use std::fs;
-
 const FONTS: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -22,35 +20,43 @@ const FONTS: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
+const RAM_SIZE: usize = 4096;
+
 pub struct Cpu {
     // Memory
-    ram: [u8; 4096],   // 4k RAM
-    _stack: [u16; 16], // 16 16-bit values.
+    ram: [u8; RAM_SIZE],
+    /// 16 16-bit values
+    _stack: [u16; 16],
 
     // VRAM
     pub vram: [[bool; HEIGHT]; WIDTH],
     pub vram_changed: bool,
 
     // Registers
-    v: [u8; 16], // 16 8-bit registers
-    i: u16,      // 16-bit I register.
+    /// 16 8-bit registers
+    v: [u8; 16],
+    /// 16-bit I register
+    i: u16,
 
-    _delay_timer: u8, // 8-bit delay register.
-    _sound_timer: u8, // 8-bit sound register.
+    /// 8-bit delay register
+    _delay_timer: u8,
+    // 8-bit sound register
+    _sound_timer: u8,
 
-    program_counter: u16, // 16-bit program counter.
+    /// 16-bit program counter
+    program_counter: u16,
     update_pc: bool,
 
-    _stack_pointer: u8, // 8-bit program counter.
-
-                        // I/O
-                        // keyboard: Keyboard,
+    /// 8-bit program counter
+    _stack_pointer: u8,
+    // I/O
+    // keyboard: Keyboard
 }
 
 impl Default for Cpu {
     fn default() -> Cpu {
         Cpu {
-            ram: [0; 4096],
+            ram: [0; RAM_SIZE],
             _stack: [0; 16],
             vram: [[false; HEIGHT]; WIDTH],
             vram_changed: false,
@@ -66,12 +72,6 @@ impl Default for Cpu {
 }
 
 impl Cpu {
-    pub fn init(&mut self, filename: &str) {
-        self.load_fonts();
-        let rom: Vec<u8> = fs::read(filename).expect("No file found");
-        self.load_program(rom);
-    }
-
     /// Load fonts in RAM (from 0x000 to 0x1FF)
     fn load_fonts(&mut self) {
         for (i, byte) in FONTS.iter().enumerate() {
@@ -79,7 +79,9 @@ impl Cpu {
         }
     }
 
-    pub fn load_program(&mut self, bytecode: Vec<u8>) {
+    pub fn load_rom(&mut self, bytecode: &[u8]) {
+        self.load_fonts();
+        // TODO check out of bounds
         for (index, val) in bytecode.iter().enumerate() {
             self.ram[0x200 + index] = *val;
         }
@@ -170,7 +172,7 @@ impl Cpu {
     /// The interpreter sets the program counter to the address at the top of the stack,
     /// then subtracts 1 from the stack pointer.
     fn i_00ee(&mut self) {
-        unimplemented!();
+        todo!();
     }
 
     /// 0nnn - SYS addr
@@ -178,7 +180,9 @@ impl Cpu {
     ///
     /// This instruction is only used on the old computers on which Chip-8 was
     /// originally implemented. It is ignored by modern interpreters.
-    fn i_0nnn(&mut self, _nnn: u16) {}
+    fn i_0nnn(&mut self, _nnn: u16) {
+        todo!();
+    }
 
     /// 1nnn - JP addr
     /// Jump to location nnn.
@@ -284,18 +288,19 @@ impl Cpu {
     }
 }
 
-impl Cpu {
-    #[allow(dead_code)]
-    fn print_vram(&self) {
-        for y in 0..HEIGHT {
-            for x in 0..WIDTH {
-                if self.vram[x][y] {
-                    print!("*");
-                } else {
-                    print!("_");
-                }
-            }
-            println!("|");
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clear_screen_00e0() {
+        let mut cpu = Cpu::default();
+        cpu.vram[2][4] |= true;
+
+        cpu.i_00e0();
+
+        for pixel in cpu.vram.iter().flatten() {
+            assert_eq!(*pixel, false, "All pixels should have been cleared.");
         }
     }
 }
