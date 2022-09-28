@@ -1,5 +1,4 @@
 use crate::constants::{HEIGHT, WIDTH};
-use crate::utils;
 
 const FONTS: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -25,8 +24,10 @@ const RAM_SIZE: usize = 4096;
 pub struct Cpu {
     // Memory
     ram: [u8; RAM_SIZE],
+
     /// 16 16-bit values
-    _stack: [u16; 16],
+    stack: [u16; 16],
+    stack_pointer: u8,
 
     // VRAM
     pub vram: [[bool; HEIGHT]; WIDTH],
@@ -46,9 +47,6 @@ pub struct Cpu {
     /// 16-bit program counter
     program_counter: u16,
     update_pc: bool,
-
-    /// 8-bit program counter
-    _stack_pointer: u8,
     // I/O
     // keyboard: Keyboard
 }
@@ -57,7 +55,7 @@ impl Default for Cpu {
     fn default() -> Cpu {
         Cpu {
             ram: [0; RAM_SIZE],
-            _stack: [0; 16],
+            stack: [0; 16],
             vram: [[false; HEIGHT]; WIDTH],
             vram_changed: false,
             v: [0; 16],
@@ -66,7 +64,7 @@ impl Default for Cpu {
             _sound_timer: 0,
             program_counter: 0x200,
             update_pc: true,
-            _stack_pointer: 0,
+            stack_pointer: 0,
         }
     }
 }
@@ -89,34 +87,42 @@ impl Cpu {
 
     pub fn tick(&mut self) {
         self.update_pc = true;
-        let inst: Vec<u8> =
-            self.ram[self.program_counter as usize..(self.program_counter + 2) as usize].to_vec();
-        let instruction: [u8; 2] = inst.try_into().unwrap();
-        println!("Instruction {}", utils::format_instruction(instruction)); // TODO print hex
-        self.run_instruction(instruction);
+        let instruction: [u8; 2] = self.ram
+            [self.program_counter as usize..(self.program_counter + 2) as usize]
+            .try_into()
+            .unwrap();
+        println!("Instruction {}", utils::format_instruction(&instruction));
+        self.run_instruction(&instruction);
         if self.update_pc {
             self.program_counter += 2
         }
     }
 
-    fn run_instruction(&mut self, instruction: [u8; 2]) {
+    fn run_instruction(&mut self, instruction: &[u8; 2]) {
         let nibbles = (
             instruction[0] >> 4,
             instruction[0] & 0x0F,
             instruction[1] >> 4,
             instruction[1] & 0x0F,
         );
-        let x = nibbles.1; // A 4-bit value, the lower 4 bits of the high byte of the instruction
-        let y = nibbles.2; // A 4-bit value, the upper 4 bits of the low byte of the instruction
-        let n = nibbles.3; // A 4-bit value, the lowest 4 bits of the instruction
-        let kk = instruction[1]; // An 8-bit value, the lowest 8 bits of the instruction
-        let nnn = utils::inst_array_to_u16(instruction) & 0x0FFF; // A 12-bit value, the lowest 12 bits of the instruction
+
+        // A 4-bit value, the lower 4 bits of the high byte of the instruction
+        let x = nibbles.1;
+        // A 4-bit value, the upper 4 bits of the low byte of the instruction
+        let y = nibbles.2;
+        // A 4-bit value, the lowest 4 bits of the instruction
+        let n = nibbles.3;
+        // An 8-bit value, the lowest 8 bits of the instruction
+        let kk = instruction[1];
+        // A 12-bit value, the lowest 12 bits of the instruction
+        let nnn = (((instruction[0] as u16) << 8) | instruction[1] as u16) & 0x0FFF;
+
         match nibbles {
             (0x0, 0x0, 0xE, 0x0) => self.i_00e0(),
             (0x0, 0x0, 0xE, 0xE) => self.i_00ee(),
             (0x0, _, _, _) => self.i_0nnn(nnn),
             (0x1, _, _, _) => self.i_1nnn(nnn),
-            // (0x2, _, _, _) => self.i_2nnn(nnn),
+            (0x2, _, _, _) => self.i_2nnn(nnn),
             (0x3, _, _, _) => self.i_3xkk(x, kk),
             // (0x4, _, _, _) => self.i_4xkk(x, kk),
             // (0x5, _, _, _) => self.i_5xy0(x, y),
@@ -134,7 +140,7 @@ impl Cpu {
             // (0x9, _, _, _) => self.i_9xy0(x, y),
             (0xA, _, _, _) => self.i_annn(nnn),
             // (0xB, _, _, _) => self.i_bnnn(nnn),
-            // (0xC, _, _, _) => self.i_cxkk(x, kk),
+            (0xC, _, _, _) => self.i_cxkk(x, kk),
             (0xD, _, _, _) => self.i_dxyn(x, y, n),
             // (0xE, _, 0x9, 0xE) => self.i_Ex9E(x),
             // (0xE, _, 0xA, 0x1) => self.i_ExA1(x),
@@ -144,10 +150,13 @@ impl Cpu {
             // (0xF, _, 0x1, 0x8) => self.i_Fx18(x),
             (0xF, _, 0x1, 0xE) => self.i_fx1e(x),
             (0xF, _, 0x2, 0x9) => self.i_fx29(x),
-            // (0xF, _, 0x3, 0x3) => self.i_Fx33(x),
+            (0xF, _, 0x3, 0x3) => self.i_fx33(x),
             // (0xF, _, 0x5, 0x5) => self.i_Fx55(x),
             // (0xF, _, 0x6, 0x5) => self.i_Fx65(x),
-            _ => panic!("Skipping unknown instruction: {:x?}", instruction),
+            _ => panic!(
+                "Skipping unknown instruction: {}",
+                utils::format_instruction(instruction)
+            ),
         }
     }
 }
@@ -172,7 +181,8 @@ impl Cpu {
     /// The interpreter sets the program counter to the address at the top of the stack,
     /// then subtracts 1 from the stack pointer.
     fn i_00ee(&mut self) {
-        todo!();
+        self.program_counter = self.stack[self.stack_pointer as usize - 1];
+        self.stack_pointer -= 1;
     }
 
     /// 0nnn - SYS addr
@@ -180,9 +190,8 @@ impl Cpu {
     ///
     /// This instruction is only used on the old computers on which Chip-8 was
     /// originally implemented. It is ignored by modern interpreters.
-    fn i_0nnn(&mut self, _nnn: u16) {
-        todo!();
-    }
+    #[allow(unused_variables)]
+    fn i_0nnn(&mut self, nnn: u16) {}
 
     /// 1nnn - JP addr
     /// Jump to location nnn.
@@ -193,13 +202,26 @@ impl Cpu {
         self.update_pc = false;
     }
 
+    /// 2NNN
+    ///
+    /// Execute subroutine starting at address NNN
+    fn i_2nnn(&mut self, nnn: u16) {
+        // push PC to the stack to return later
+        self.stack[self.stack_pointer as usize] = self.program_counter;
+        self.stack_pointer += 1;
+
+        // call the subroutine
+        self.program_counter = nnn;
+        self.update_pc = false;
+    }
+
     /// 3xkk - SE Vx, byte
     /// Skip next instruction if Vx = kk.
     ///
     /// The interpreter compares register Vx to kk, and if they are equal, increments
     /// the program counter by 2.
     fn i_3xkk(&mut self, x: u8, kk: u8) {
-        if self.v[x as usize] == self.v[kk as usize] {
+        if self.v[x as usize] == kk {
             self.program_counter += 4;
             self.update_pc = false;
         }
@@ -217,7 +239,7 @@ impl Cpu {
     ///
     /// Adds the value kk to the value of register Vx, then stores the result in Vx.
     fn i_7xkk(&mut self, x: u8, kk: u8) {
-        self.v[x as usize] += kk;
+        self.v[x as usize] = self.v[x as usize].wrapping_add(kk);
     }
 
     /// Annn - LD I, addr
@@ -226,6 +248,11 @@ impl Cpu {
     /// The value of register I is set to nnn.
     fn i_annn(&mut self, nnn: u16) {
         self.i = nnn;
+    }
+
+    /// Set VX to a random number with a mask of kk
+    fn i_cxkk(&mut self, x: u8, kk: u8) {
+        self.v[x as usize] = utils::random_byte() & kk;
     }
 
     /// Display n-byte sprite starting at memory location I at (Vx, Vy),
@@ -286,6 +313,36 @@ impl Cpu {
     fn i_fx29(&mut self, x: u8) {
         self.i = (self.v[x as usize] * 5) as u16 // 5 is the len of a digit
     }
+
+    /// FX33
+    ///
+    /// Store the binary-coded decimal equivalent of the value stored in register VX at
+    /// addresses I, I+1, and I+2.
+    fn i_fx33(&mut self, x: u8) {
+        let mut byte = self.v[x as usize];
+
+        // first figure
+        self.ram[self.i as usize + 2] = byte.rem_euclid(10);
+
+        // second figure
+        byte /= 10;
+        self.ram[self.i as usize + 1] = byte.rem_euclid(10);
+
+        // third figure
+        byte /= 10;
+        self.ram[self.i as usize] = byte.rem_euclid(10);
+    }
+}
+
+mod utils {
+
+    pub fn format_instruction(inst: &[u8; 2]) -> String {
+        format!("{:02X}{:02X}", inst[0], inst[1])
+    }
+
+    pub fn random_byte() -> u8 {
+        rand::random()
+    }
 }
 
 #[cfg(test)]
@@ -300,7 +357,8 @@ mod tests {
         cpu.i_00e0();
 
         for pixel in cpu.vram.iter().flatten() {
-            assert_eq!(*pixel, false, "All pixels should have been cleared.");
+            assert_eq!(*pixel, false, "All pixels should have been cleared");
+            assert!(cpu.vram_changed, "Screen must be updated");
         }
     }
 }

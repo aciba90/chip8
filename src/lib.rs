@@ -2,7 +2,6 @@ pub mod args;
 mod constants;
 mod cpu;
 mod screen;
-mod utils;
 
 extern crate sdl2;
 
