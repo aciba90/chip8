@@ -1,4 +1,5 @@
 use crate::constants::{HEIGHT, WIDTH};
+use std::fmt;
 
 const FONTS: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -87,37 +88,21 @@ impl Cpu {
 
     pub fn tick(&mut self) {
         self.update_pc = true;
-        let instruction: [u8; 2] = self.ram
+        let opcode: Opcode = self.ram
             [self.program_counter as usize..(self.program_counter + 2) as usize]
             .try_into()
             .unwrap();
-        println!("Instruction {}", utils::format_instruction(&instruction));
-        self.run_instruction(&instruction);
+        println!("Opcode {}", &opcode);
+        self.run_opcode(&opcode);
         if self.update_pc {
             self.program_counter += 2
         }
     }
 
-    fn run_instruction(&mut self, instruction: &[u8; 2]) {
-        let nibbles = (
-            instruction[0] >> 4,
-            instruction[0] & 0x0F,
-            instruction[1] >> 4,
-            instruction[1] & 0x0F,
-        );
+    fn run_opcode(&mut self, opcode: &Opcode) {
+        let (x, y, n, kk, nnn) = opcode.interpret();
 
-        // A 4-bit value, the lower 4 bits of the high byte of the instruction
-        let x = nibbles.1;
-        // A 4-bit value, the upper 4 bits of the low byte of the instruction
-        let y = nibbles.2;
-        // A 4-bit value, the lowest 4 bits of the instruction
-        let n = nibbles.3;
-        // An 8-bit value, the lowest 8 bits of the instruction
-        let kk = instruction[1];
-        // A 12-bit value, the lowest 12 bits of the instruction
-        let nnn = (((instruction[0] as u16) << 8) | instruction[1] as u16) & 0x0FFF;
-
-        match nibbles {
+        match opcode.nibbles() {
             (0x0, 0x0, 0xE, 0x0) => self.i_00e0(),
             (0x0, 0x0, 0xE, 0xE) => self.i_00ee(),
             (0x0, _, _, _) => self.i_0nnn(nnn),
@@ -153,10 +138,7 @@ impl Cpu {
             (0xF, _, 0x3, 0x3) => self.i_fx33(x),
             // (0xF, _, 0x5, 0x5) => self.i_Fx55(x),
             // (0xF, _, 0x6, 0x5) => self.i_Fx65(x),
-            _ => panic!(
-                "Skipping unknown instruction: {}",
-                utils::format_instruction(instruction)
-            ),
+            _ => panic!("Skipping unknown opcode: {}", opcode),
         }
     }
 }
@@ -334,12 +316,53 @@ impl Cpu {
     }
 }
 
-mod utils {
+#[derive(Debug)]
+struct Opcode([u8; 2]);
 
-    pub fn format_instruction(inst: &[u8; 2]) -> String {
-        format!("{:02X}{:02X}", inst[0], inst[1])
+impl Opcode {
+    pub fn nibbles(&self) -> (u8, u8, u8, u8) {
+        (
+            self.0[0] >> 4,
+            self.0[0] & 0x0F,
+            self.0[1] >> 4,
+            self.0[1] & 0x0F,
+        )
     }
 
+    pub fn interpret(&self) -> (u8, u8, u8, u8, u16) {
+        let nibbles = self.nibbles();
+
+        // A 4-bit value, the lower 4 bits of the high byte of the instruction
+        let x = nibbles.1;
+        // A 4-bit value, the upper 4 bits of the low byte of the instruction
+        let y = nibbles.2;
+        // A 4-bit value, the lowest 4 bits of the instruction
+        let n = nibbles.3;
+        // An 8-bit value, the lowest 8 bits of the instruction
+        let kk = self.0[1];
+        // A 12-bit value, the lowest 12 bits of the instruction
+        let nnn = (((self.0[0] as u16) << 8) | self.0[1] as u16) & 0x0FFF;
+
+        (x, y, n, kk, nnn)
+    }
+}
+
+impl TryFrom<&[u8]> for Opcode {
+    type Error = &'static str;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let raw_opcode: [u8; 2] = value.try_into().unwrap();
+        Ok(Opcode(raw_opcode))
+    }
+}
+
+impl fmt::Display for Opcode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:02X}{:02X}", self.0[0], self.0[1])
+    }
+}
+
+mod utils {
     pub fn random_byte() -> u8 {
         rand::random()
     }
