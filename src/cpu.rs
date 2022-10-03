@@ -113,10 +113,10 @@ impl Cpu {
             (0x5, _, _, _) => self.i_5xy0(x, y),
             (0x6, _, _, _) => self.i_6xkk(x, kk),
             (0x7, _, _, _) => self.i_7xkk(x, kk),
-            // (0x8, _, _, 0x0) => self.i_8xy0(x, y),
-            // (0x8, _, _, 0x1) => self.i_8xy1(x, y),
-            // (0x8, _, _, 0x2) => self.i_8xy2(x, y),
-            // (0x8, _, _, 0x3) => self.i_8xy3(x, y),
+            (0x8, _, _, 0x0) => self.i_8xy0(&x, &y),
+            (0x8, _, _, 0x1) => self.i_8xy1(&x, &y),
+            (0x8, _, _, 0x2) => self.i_8xy2(&x, &y),
+            (0x8, _, _, 0x3) => self.i_8xy3(&x, &y),
             // (0x8, _, _, 0x4) => self.i_8xy4(x, y),
             // (0x8, _, _, 0x5) => self.i_8xy5(x, y),
             // (0x8, _, _, 0x6) => self.i_8xy6(x, y),
@@ -241,6 +241,26 @@ impl Cpu {
     /// Adds the value kk to the value of register Vx, then stores the result in Vx.
     fn i_7xkk(&mut self, x: u8, kk: u8) {
         self.v[x as usize] = self.v[x as usize].wrapping_add(kk);
+    }
+
+    /// Store the value of register VY in register VX
+    fn i_8xy0(&mut self, x: &u8, y: &u8) {
+        self.v[*x as usize] = self.v[*y as usize];
+    }
+
+    /// Set VX to VX OR VY
+    fn i_8xy1(&mut self, x: &u8, y: &u8) {
+        self.v[*x as usize] |= self.v[*y as usize];
+    }
+
+    /// Set VX to VX AND VY
+    fn i_8xy2(&mut self, x: &u8, y: &u8) {
+        self.v[*x as usize] &= self.v[*y as usize];
+    }
+
+    /// Set VX to VX XOR VY
+    fn i_8xy3(&mut self, x: &u8, y: &u8) {
+        self.v[*x as usize] ^= self.v[*y as usize];
     }
 
     /// Skip the following instruction if the value of register VX is not equal to the
@@ -434,7 +454,6 @@ mod tests {
     #[test]
     fn test_4xnn_skip_instruction() {
         let mut cpu = create_cpu();
-        cpu.load_fonts();
         assert_eq!(cpu.program_counter, 0x200);
 
         // fifth register is not 0x2A
@@ -451,7 +470,6 @@ mod tests {
     #[test]
     fn test_4xnn_do_not_skip_instruction() {
         let mut cpu = create_cpu();
-        cpu.load_fonts();
         assert_eq!(cpu.program_counter, 0x200);
         cpu.v[5] = 0x2A;
         let rom: &[u8] = &[0x45, 0x2A];
@@ -466,7 +484,6 @@ mod tests {
     #[test]
     fn test_5xy0_skip_instruction() {
         let mut cpu = create_cpu();
-        cpu.load_fonts();
         assert_eq!(cpu.program_counter, 0x200);
 
         cpu.v[5] = 2;
@@ -483,7 +500,6 @@ mod tests {
     #[test]
     fn test_5xy0_do_skip_instruction() {
         let mut cpu = create_cpu();
-        cpu.load_fonts();
         assert_eq!(cpu.program_counter, 0x200);
 
         cpu.v[5] = 2;
@@ -493,6 +509,67 @@ mod tests {
 
         cpu.tick();
 
+        assert_eq!(cpu.program_counter, 0x202);
+    }
+
+    // Store the value of register VY in register VX
+    #[test]
+    fn test_8xy0() {
+        let mut cpu = create_cpu();
+        cpu.v[5] = 2;
+        let rom: &[u8] = &[0x84, 0x50];
+        cpu.load_rom(rom);
+        cpu.tick();
+        assert_eq!(cpu.v[4], 2);
+        assert_eq!(cpu.v[5], 2);
+        assert_eq!(cpu.program_counter, 0x202);
+    }
+
+    /// Set VX to VX OR VY
+    #[test]
+    fn test_8xy1() {
+        let mut cpu = create_cpu();
+        cpu.v[4] = 0b1001;
+        cpu.v[5] = 0b1010;
+        let rom: &[u8] = &[0x84, 0x51];
+        cpu.load_rom(rom);
+
+        cpu.tick();
+
+        assert_eq!(cpu.v[4], 0b1011);
+        assert_eq!(cpu.v[5], 0b1010);
+        assert_eq!(cpu.program_counter, 0x202);
+    }
+
+    /// Set VX to VX AND VY
+    #[test]
+    fn test_8xy2() {
+        let mut cpu = create_cpu();
+        cpu.v[4] = 0b1001;
+        cpu.v[5] = 0b1010;
+        let rom: &[u8] = &[0x84, 0x52];
+        cpu.load_rom(rom);
+
+        cpu.tick();
+
+        assert_eq!(cpu.v[4], 0b1000);
+        assert_eq!(cpu.v[5], 0b1010);
+        assert_eq!(cpu.program_counter, 0x202);
+    }
+
+    /// Set VX to VX XOR VY
+    #[test]
+    fn test_8xy3() {
+        let mut cpu = create_cpu();
+        cpu.v[4] = 0b1001;
+        cpu.v[5] = 0b1010;
+        let rom: &[u8] = &[0x84, 0x53];
+        cpu.load_rom(rom);
+
+        cpu.tick();
+
+        assert_eq!(cpu.v[4], 0b0011);
+        assert_eq!(cpu.v[5], 0b1010);
         assert_eq!(cpu.program_counter, 0x202);
     }
 
