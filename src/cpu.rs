@@ -105,14 +105,14 @@ impl Cpu {
         match opcode.nibbles() {
             (0x0, 0x0, 0xE, 0x0) => self.i_00e0(),
             (0x0, 0x0, 0xE, 0xE) => self.i_00ee(),
-            (0x0, _, _, _) => self.i_0nnn(nnn),
+            (0x0, _, _, _) => self.i_0nnn(&nnn),
             (0x1, _, _, _) => self.i_1nnn(nnn),
             (0x2, _, _, _) => self.i_2nnn(nnn),
-            (0x3, _, _, _) => self.i_3xkk(x, kk),
-            (0x4, _, _, _) => self.i_4xkk(x, kk),
-            (0x5, _, _, _) => self.i_5xy0(x, y),
-            (0x6, _, _, _) => self.i_6xkk(x, kk),
-            (0x7, _, _, _) => self.i_7xkk(x, kk),
+            (0x3, _, _, _) => self.i_3xkk(&x, &kk),
+            (0x4, _, _, _) => self.i_4xkk(&x, &kk),
+            (0x5, _, _, _) => self.i_5xy0(&x, &y),
+            (0x6, _, _, _) => self.i_6xkk(&x, kk),
+            (0x7, _, _, _) => self.i_7xkk(&x, &kk),
             (0x8, _, _, 0x0) => self.i_8xy0(&x, &y),
             (0x8, _, _, 0x1) => self.i_8xy1(&x, &y),
             (0x8, _, _, 0x2) => self.i_8xy2(&x, &y),
@@ -122,20 +122,20 @@ impl Cpu {
             // (0x8, _, _, 0x6) => self.i_8xy6(x, y),
             // (0x8, _, _, 0x7) => self.i_8xy7(x, y),
             // (0x8, _, _, 0xE) => self.i_8xyE(x, y),
-            (0x9, _, _, _) => self.i_9xy0(x, y),
+            (0x9, _, _, _) => self.i_9xy0(&x, &y),
             (0xA, _, _, _) => self.i_annn(nnn),
             // (0xB, _, _, _) => self.i_bnnn(nnn),
-            (0xC, _, _, _) => self.i_cxkk(x, kk),
-            (0xD, _, _, _) => self.i_dxyn(x, y, n),
+            (0xC, _, _, _) => self.i_cxkk(&x, &kk),
+            (0xD, _, _, _) => self.i_dxyn(&x, &y, &n),
             // (0xE, _, 0x9, 0xE) => self.i_Ex9E(x),
             // (0xE, _, 0xA, 0x1) => self.i_ExA1(x),
             // (0xF, _, 0x0, 0x7) => self.i_Fx07(x),
             (0xF, _, 0x0, 0xA) => self.i_fx0a(x),
             // (0xF, _, 0x1, 0x5) => self.i_Fx15(x),
             // (0xF, _, 0x1, 0x8) => self.i_Fx18(x),
-            (0xF, _, 0x1, 0xE) => self.i_fx1e(x),
-            (0xF, _, 0x2, 0x9) => self.i_fx29(x),
-            (0xF, _, 0x3, 0x3) => self.i_fx33(x),
+            (0xF, _, 0x1, 0xE) => self.i_fx1e(&x),
+            (0xF, _, 0x2, 0x9) => self.i_fx29(&x),
+            (0xF, _, 0x3, 0x3) => self.i_fx33(&x),
             // (0xF, _, 0x5, 0x5) => self.i_Fx55(x),
             // (0xF, _, 0x6, 0x5) => self.i_Fx65(x),
             _ => panic!("Skipping unknown opcode: {}", opcode),
@@ -173,7 +173,7 @@ impl Cpu {
     /// This instruction is only used on the old computers on which Chip-8 was
     /// originally implemented. It is ignored by modern interpreters.
     #[allow(unused_variables)]
-    fn i_0nnn(&mut self, nnn: u16) {}
+    fn i_0nnn(&mut self, nnn: &u16) {}
 
     /// 1nnn - JP addr
     /// Jump to location nnn.
@@ -202,16 +202,16 @@ impl Cpu {
     ///
     /// The interpreter compares register Vx to kk, and if they are equal, increments
     /// the program counter by 2.
-    fn i_3xkk(&mut self, x: u8, kk: u8) {
-        if self.v[x as usize] == kk {
+    fn i_3xkk(&mut self, x: &u8, kk: &u8) {
+        if self.v[*x as usize] == *kk {
             self.program_counter += 4;
             self.update_pc = false;
         }
     }
 
     /// Skip the following instruction if the value of register VX is not equal to NN
-    fn i_4xkk(&mut self, x: u8, kk: u8) {
-        if self.v[x as usize] == kk {
+    fn i_4xkk(&mut self, x: &u8, kk: &u8) {
+        if self.v[*x as usize] == *kk {
             return;
         }
         self.program_counter += 4;
@@ -220,8 +220,8 @@ impl Cpu {
 
     /// Skip the following instruction if the value of register VX is equal to the
     /// value of register VY
-    fn i_5xy0(&mut self, x: u8, y: u8) {
-        if self.v[x as usize] != self.v[y as usize] {
+    fn i_5xy0(&mut self, x: &u8, y: &u8) {
+        if self.v[*x as usize] != self.v[*y as usize] {
             return;
         }
         self.program_counter += 4;
@@ -232,15 +232,15 @@ impl Cpu {
     /// Set Vx = kk.
     ///
     /// The interpreter puts the value kk into register Vx.
-    fn i_6xkk(&mut self, x: u8, kk: u8) {
-        self.v[x as usize] = kk;
+    fn i_6xkk(&mut self, x: &u8, kk: u8) {
+        self.v[*x as usize] = kk;
     }
 
     /// Set Vx = Vx + kk.
     ///
     /// Adds the value kk to the value of register Vx, then stores the result in Vx.
-    fn i_7xkk(&mut self, x: u8, kk: u8) {
-        self.v[x as usize] = self.v[x as usize].wrapping_add(kk);
+    fn i_7xkk(&mut self, x: &u8, kk: &u8) {
+        self.v[*x as usize] = self.v[*x as usize].wrapping_add(*kk);
     }
 
     /// Store the value of register VY in register VX
@@ -265,8 +265,8 @@ impl Cpu {
 
     /// Skip the following instruction if the value of register VX is not equal to the
     /// value of register VY
-    fn i_9xy0(&mut self, x: u8, y: u8) {
-        if self.v[x as usize] == self.v[y as usize] {
+    fn i_9xy0(&mut self, x: &u8, y: &u8) {
+        if self.v[*x as usize] == self.v[*y as usize] {
             return;
         }
         self.program_counter += 4;
@@ -282,8 +282,8 @@ impl Cpu {
     }
 
     /// Set VX to a random number with a mask of kk
-    fn i_cxkk(&mut self, x: u8, kk: u8) {
-        self.v[x as usize] = utils::random_byte() & kk;
+    fn i_cxkk(&mut self, x: &u8, kk: &u8) {
+        self.v[*x as usize] = utils::random_byte() & *kk;
     }
 
     /// Display n-byte sprite starting at memory location I at (Vx, Vy),
@@ -297,12 +297,12 @@ impl Cpu {
     /// display, it wraps around to the opposite side of the screen.
     /// See instruction 8xy3 for more information on XOR, and section 2.4, Display
     /// for more information on the Chip-8 screen and sprites.
-    fn i_dxyn(&mut self, x: u8, y: u8, n: u8) {
-        let vx = ((self.v[x as usize] as usize) % WIDTH) as usize;
-        let vy = ((self.v[y as usize] as usize) % HEIGHT) as usize;
+    fn i_dxyn(&mut self, x: &u8, y: &u8, n: &u8) {
+        let vx = ((self.v[*x as usize] as usize) % WIDTH) as usize;
+        let vy = ((self.v[*y as usize] as usize) % HEIGHT) as usize;
 
         self.v[0xF] = 0;
-        for jj in 0..n {
+        for jj in 0..*n {
             let yy = (vy + jj as usize) % HEIGHT;
             let byte_ii = self.ram[(self.i + (jj as u16)) as usize];
             for ii in 0..8 {
@@ -322,7 +322,7 @@ impl Cpu {
     /// All execution stops until a key is pressed, then the value of that key
     /// is stored in Vx.
     fn i_fx0a(&mut self, _x: u8) {
-        // TODO get keys
+        todo!("get keys");
         self.update_pc = false;
     }
 
@@ -330,8 +330,8 @@ impl Cpu {
     /// Set I = I + Vx.
     ///
     /// The values of I and Vx are added, and the results are stored in I.
-    fn i_fx1e(&mut self, x: u8) {
-        self.i += self.v[x as usize] as u16;
+    fn i_fx1e(&mut self, x: &u8) {
+        self.i += self.v[*x as usize] as u16;
     }
 
     /// Fx29 - LD F, Vx
@@ -341,16 +341,16 @@ impl Cpu {
     /// corresponding to the value of Vx.
     /// See section 2.4, Display, for more information on the Chip-8
     /// hexadecimal font.
-    fn i_fx29(&mut self, x: u8) {
-        self.i = (self.v[x as usize] * 5) as u16 // 5 is the len of a digit
+    fn i_fx29(&mut self, x: &u8) {
+        self.i = (self.v[*x as usize] * 5) as u16 // 5 is the len of a digit
     }
 
     /// FX33
     ///
     /// Store the binary-coded decimal equivalent of the value stored in register VX at
     /// addresses I, I+1, and I+2.
-    fn i_fx33(&mut self, x: u8) {
-        let mut byte = self.v[x as usize];
+    fn i_fx33(&mut self, x: &u8) {
+        let mut byte = self.v[*x as usize];
 
         // first figure
         self.ram[self.i as usize + 2] = byte.rem_euclid(10);
