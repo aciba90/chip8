@@ -109,8 +109,8 @@ impl Cpu {
             (0x1, _, _, _) => self.i_1nnn(nnn),
             (0x2, _, _, _) => self.i_2nnn(nnn),
             (0x3, _, _, _) => self.i_3xkk(x, kk),
-            // (0x4, _, _, _) => self.i_4xkk(x, kk),
-            // (0x5, _, _, _) => self.i_5xy0(x, y),
+            (0x4, _, _, _) => self.i_4xkk(x, kk),
+            (0x5, _, _, _) => self.i_5xy0(x, y),
             (0x6, _, _, _) => self.i_6xkk(x, kk),
             (0x7, _, _, _) => self.i_7xkk(x, kk),
             // (0x8, _, _, 0x0) => self.i_8xy0(x, y),
@@ -122,7 +122,7 @@ impl Cpu {
             // (0x8, _, _, 0x6) => self.i_8xy6(x, y),
             // (0x8, _, _, 0x7) => self.i_8xy7(x, y),
             // (0x8, _, _, 0xE) => self.i_8xyE(x, y),
-            // (0x9, _, _, _) => self.i_9xy0(x, y),
+            (0x9, _, _, _) => self.i_9xy0(x, y),
             (0xA, _, _, _) => self.i_annn(nnn),
             // (0xB, _, _, _) => self.i_bnnn(nnn),
             (0xC, _, _, _) => self.i_cxkk(x, kk),
@@ -209,6 +209,25 @@ impl Cpu {
         }
     }
 
+    /// Skip the following instruction if the value of register VX is not equal to NN
+    fn i_4xkk(&mut self, x: u8, kk: u8) {
+        if self.v[x as usize] == kk {
+            return;
+        }
+        self.program_counter += 4;
+        self.update_pc = false;
+    }
+
+    /// Skip the following instruction if the value of register VX is equal to the
+    /// value of register VY
+    fn i_5xy0(&mut self, x: u8, y: u8) {
+        if self.v[x as usize] != self.v[y as usize] {
+            return;
+        }
+        self.program_counter += 4;
+        self.update_pc = false;
+    }
+
     /// 6xkk - LD Vx, byte
     /// Set Vx = kk.
     ///
@@ -222,6 +241,16 @@ impl Cpu {
     /// Adds the value kk to the value of register Vx, then stores the result in Vx.
     fn i_7xkk(&mut self, x: u8, kk: u8) {
         self.v[x as usize] = self.v[x as usize].wrapping_add(kk);
+    }
+
+    /// Skip the following instruction if the value of register VX is not equal to the
+    /// value of register VY
+    fn i_9xy0(&mut self, x: u8, y: u8) {
+        if self.v[x as usize] == self.v[y as usize] {
+            return;
+        }
+        self.program_counter += 4;
+        self.update_pc = false;
     }
 
     /// Annn - LD I, addr
@@ -356,6 +385,15 @@ impl TryFrom<&[u8]> for Opcode {
     }
 }
 
+impl TryFrom<&[u16]> for Opcode {
+    type Error = &'static str;
+
+    fn try_from(value: &[u16]) -> Result<Self, Self::Error> {
+        let x = value[0].to_be_bytes();
+        Ok(Opcode(x))
+    }
+}
+
 impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:02X}{:02X}", self.0[0], self.0[1])
@@ -372,9 +410,16 @@ mod utils {
 mod tests {
     use super::*;
 
+    fn create_cpu() -> Cpu {
+        let mut cpu = Cpu::default();
+        cpu.load_fonts();
+
+        cpu
+    }
+
     #[test]
     fn clear_screen_00e0() {
-        let mut cpu = Cpu::default();
+        let mut cpu = create_cpu();
         cpu.vram[2][4] |= true;
 
         cpu.i_00e0();
@@ -383,5 +428,105 @@ mod tests {
             assert_eq!(*pixel, false, "All pixels should have been cleared");
             assert!(cpu.vram_changed, "Screen must be updated");
         }
+    }
+
+    /// if v[x] != nn => skip following instruction
+    #[test]
+    fn test_4xnn_skip_instruction() {
+        let mut cpu = create_cpu();
+        cpu.load_fonts();
+        assert_eq!(cpu.program_counter, 0x200);
+
+        // fifth register is not 0x2A
+        cpu.v[5] = 2;
+        let rom: &[u8] = &[0x45, 0x2A];
+        cpu.load_rom(rom);
+
+        cpu.tick();
+
+        assert_eq!(cpu.program_counter, 0x204);
+    }
+
+    /// if v[x] == nn => don't skip following instruction
+    #[test]
+    fn test_4xnn_do_not_skip_instruction() {
+        let mut cpu = create_cpu();
+        cpu.load_fonts();
+        assert_eq!(cpu.program_counter, 0x200);
+        cpu.v[5] = 0x2A;
+        let rom: &[u8] = &[0x45, 0x2A];
+        cpu.load_rom(rom);
+
+        cpu.tick();
+
+        assert_eq!(cpu.program_counter, 0x202);
+    }
+
+    /// if v[x] == v[y] => skip following instruction
+    #[test]
+    fn test_5xy0_skip_instruction() {
+        let mut cpu = create_cpu();
+        cpu.load_fonts();
+        assert_eq!(cpu.program_counter, 0x200);
+
+        cpu.v[5] = 2;
+        cpu.v[4] = 2;
+        let rom: &[u8] = &[0x54, 0x50];
+        cpu.load_rom(rom);
+
+        cpu.tick();
+
+        assert_eq!(cpu.program_counter, 0x204);
+    }
+
+    /// if v[x] != v[y] => do not skip following instruction
+    #[test]
+    fn test_5xy0_do_skip_instruction() {
+        let mut cpu = create_cpu();
+        cpu.load_fonts();
+        assert_eq!(cpu.program_counter, 0x200);
+
+        cpu.v[5] = 2;
+        cpu.v[4] = 5;
+        let rom: &[u8] = &[0x54, 0x50];
+        cpu.load_rom(rom);
+
+        cpu.tick();
+
+        assert_eq!(cpu.program_counter, 0x202);
+    }
+
+    /// if v[x] != v[y] => skip following instruction
+    #[test]
+    fn test_9xy0_skip_instruction() {
+        let mut cpu = create_cpu();
+        cpu.load_fonts();
+        assert_eq!(cpu.program_counter, 0x200);
+
+        cpu.v[5] = 2;
+        cpu.v[4] = 5;
+        let rom: &[u8] = &[0x94, 0x50];
+        cpu.load_rom(rom);
+
+        cpu.tick();
+
+        assert_eq!(cpu.program_counter, 0x204);
+    }
+
+    /// if v[x] == v[y] => do not skip following instruction
+    #[test]
+    fn test_9xy0_do_skip_instruction() {
+        let mut cpu = create_cpu();
+        cpu.load_fonts();
+        assert_eq!(cpu.program_counter, 0x200);
+
+        cpu.v[5] = 2;
+        cpu.v[4] = 2;
+        let rom: &[u8] = &[0x94, 0x50];
+        cpu.load_rom(rom);
+
+        cpu.tick();
+
+        assert_eq!(cpu.program_counter, 0x202);
     }
 }
