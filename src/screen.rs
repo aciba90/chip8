@@ -65,7 +65,7 @@ impl Screen {
         self.canvas.set_draw_color(Color::RGB(255, 255, 255));
         for y in 0..HEIGHT {
             let yy = y * self.scale;
-            for x in 0..WIDTH {
+            for (x, _) in buffer.iter().enumerate().take(WIDTH) {
                 let xx = x * self.scale;
                 if buffer[x][y] {
                     for i in 0..self.scale {
