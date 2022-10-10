@@ -1,3 +1,7 @@
+mod instructions;
+
+use instructions::Instruction;
+
 use crate::constants::{HEIGHT, WIDTH};
 use std::fmt;
 
@@ -93,53 +97,42 @@ impl Cpu {
             .try_into()
             .unwrap();
         println!("Opcode {}", &opcode);
-        self.run_opcode(&opcode);
+        let instruction = Instruction::decode(opcode);
+        self.run_instruction(&instruction);
         if self.update_pc {
             self.program_counter += 2
         }
     }
 
-    fn run_opcode(&mut self, opcode: &Opcode) {
-        let (x, y, n, kk, nnn) = opcode.interpret();
+    fn run_instruction(&mut self, instruction: &Instruction) {
+        match *instruction {
+            Instruction::Nop => (),
+            Instruction::Cls => self.i_00e0(),
+            Instruction::Rts => self.i_00ee(),
+            Instruction::Jmp { nnn } => self.i_1nnn(nnn),
+            Instruction::Call { nnn } => self.i_2nnn(nnn),
+            Instruction::Ske { x, kk } => self.i_3xkk(&x, &kk),
+            Instruction::Skne { x, kk } => self.i_4xkk(&x, &kk),
+            Instruction::Skre { x, y } => self.i_5xy0(&x, &y),
+            Instruction::Load { x, kk } => self.i_6xkk(&x, kk),
+            Instruction::Add { x, kk } => self.i_7xkk(&x, &kk),
+            Instruction::Move { x, y } => self.i_8xy0(&x, &y),
+            Instruction::Or { x, y } => self.i_8xy1(&x, &y),
+            Instruction::And { x, y } => self.i_8xy2(&x, &y),
+            Instruction::Xor { x, y } => self.i_8xy3(&x, &y),
 
-        match opcode.nibbles() {
-            (0x0, 0x0, 0xE, 0x0) => self.i_00e0(),
-            (0x0, 0x0, 0xE, 0xE) => self.i_00ee(),
-            (0x0, _, _, _) => self.i_0nnn(&nnn),
-            (0x1, _, _, _) => self.i_1nnn(nnn),
-            (0x2, _, _, _) => self.i_2nnn(nnn),
-            (0x3, _, _, _) => self.i_3xkk(&x, &kk),
-            (0x4, _, _, _) => self.i_4xkk(&x, &kk),
-            (0x5, _, _, _) => self.i_5xy0(&x, &y),
-            (0x6, _, _, _) => self.i_6xkk(&x, kk),
-            (0x7, _, _, _) => self.i_7xkk(&x, &kk),
-            (0x8, _, _, 0x0) => self.i_8xy0(&x, &y),
-            (0x8, _, _, 0x1) => self.i_8xy1(&x, &y),
-            (0x8, _, _, 0x2) => self.i_8xy2(&x, &y),
-            (0x8, _, _, 0x3) => self.i_8xy3(&x, &y),
-            // (0x8, _, _, 0x4) => self.i_8xy4(x, y),
-            // (0x8, _, _, 0x5) => self.i_8xy5(x, y),
-            // (0x8, _, _, 0x6) => self.i_8xy6(x, y),
-            // (0x8, _, _, 0x7) => self.i_8xy7(x, y),
-            // (0x8, _, _, 0xE) => self.i_8xyE(x, y),
-            (0x9, _, _, _) => self.i_9xy0(&x, &y),
-            (0xA, _, _, _) => self.i_annn(nnn),
-            // (0xB, _, _, _) => self.i_bnnn(nnn),
-            (0xC, _, _, _) => self.i_cxkk(&x, &kk),
-            (0xD, _, _, _) => self.i_dxyn(&x, &y, &n),
-            // (0xE, _, 0x9, 0xE) => self.i_Ex9E(x),
-            // (0xE, _, 0xA, 0x1) => self.i_ExA1(x),
-            // (0xF, _, 0x0, 0x7) => self.i_Fx07(x),
-            (0xF, _, 0x0, 0xA) => self.i_fx0a(x),
-            // (0xF, _, 0x1, 0x5) => self.i_Fx15(x),
-            // (0xF, _, 0x1, 0x8) => self.i_Fx18(x),
-            (0xF, _, 0x1, 0xE) => self.i_fx1e(&x),
-            (0xF, _, 0x2, 0x9) => self.i_fx29(&x),
-            (0xF, _, 0x3, 0x3) => self.i_fx33(&x),
-            // (0xF, _, 0x5, 0x5) => self.i_Fx55(x),
-            // (0xF, _, 0x6, 0x5) => self.i_Fx65(x),
-            _ => panic!("Skipping unknown opcode: {}", opcode),
-        }
+            Instruction::Skrne { x, y } => self.i_9xy0(&x, &y),
+            Instruction::Loadi { nnn } => self.i_annn(nnn),
+            Instruction::Rand { x, kk } => self.i_cxkk(&x, &kk),
+            Instruction::Draw { x, y, n } => self.i_dxyn(&x, &y, &n),
+            Instruction::Keyd { x } => self.i_fx0a(x),
+
+            Instruction::Addi { x } => self.i_fx1e(&x),
+            Instruction::Ldspr { x } => self.i_fx29(&x),
+            Instruction::Bcd { x } => self.i_fx33(&x),
+            // Instruction::STOR{x} =>  self.i_fx55(x),
+            // Instruction::READ{x} =>  self.i_Fx65(x),
+        };
     }
 }
 
@@ -166,14 +159,6 @@ impl Cpu {
         self.program_counter = self.stack[self.stack_pointer as usize - 1];
         self.stack_pointer -= 1;
     }
-
-    /// 0nnn - SYS addr
-    /// Jump to a machine code routine at nnn.
-    ///
-    /// This instruction is only used on the old computers on which Chip-8 was
-    /// originally implemented. It is ignored by modern interpreters.
-    #[allow(unused_variables)]
-    fn i_0nnn(&mut self, nnn: &u16) {}
 
     /// 1nnn - JP addr
     /// Jump to location nnn.
@@ -322,8 +307,8 @@ impl Cpu {
     /// All execution stops until a key is pressed, then the value of that key
     /// is stored in Vx.
     fn i_fx0a(&mut self, _x: u8) {
-        todo!("get keys");
         self.update_pc = false;
+        todo!("get keys");
     }
 
     /// Fx1E - ADD I, Vx
@@ -366,7 +351,7 @@ impl Cpu {
 }
 
 #[derive(Debug)]
-struct Opcode([u8; 2]);
+pub struct Opcode([u8; 2]);
 
 impl Opcode {
     pub fn nibbles(&self) -> (u8, u8, u8, u8) {
