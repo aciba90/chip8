@@ -38,7 +38,7 @@ impl Screen {
         }
     }
 
-    pub fn tick(&mut self, buffer: [[bool; 32]; 64]) {
+    pub fn tick(&mut self, buffer: &[[bool; 32]; 64]) {
         self.canvas.set_draw_color(Color::RGB(0, 0, 0));
         self.canvas.clear();
         for event in self.event_pump.poll_iter() {
@@ -48,7 +48,8 @@ impl Screen {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => {
-                    println!("Quitting...");
+                    // XXX log message
+                    println!("Quitting screen...");
                     self.running = false;
                 }
                 _ => {}
@@ -61,7 +62,7 @@ impl Screen {
     }
 
     // XXX: A bit coupled with vram layout
-    fn draw(&mut self, buffer: [[bool; 32]; 64]) {
+    fn draw(&mut self, buffer: &[[bool; 32]; 64]) {
         self.canvas.set_draw_color(Color::RGB(255, 255, 255));
         for y in 0..HEIGHT {
             let yy = y * self.scale;

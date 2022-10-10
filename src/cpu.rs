@@ -27,31 +27,21 @@ const FONTS: [u8; 80] = [
 const RAM_SIZE: usize = 4096;
 
 pub struct Cpu {
-    // Memory
     ram: [u8; RAM_SIZE],
-
-    /// 16 16-bit values
     stack: [u16; 16],
-    stack_pointer: u8,
 
-    // VRAM
-    pub vram: [[bool; HEIGHT]; WIDTH],
-    pub vram_changed: bool,
+    vram: [[bool; HEIGHT]; WIDTH],
+    vram_changed: bool,
 
     // Registers
-    /// 16 8-bit registers
     v: [u8; 16],
-    /// 16-bit I register
     i: u16,
 
-    /// 8-bit delay register
     _delay_timer: u8,
-    // 8-bit sound register
     _sound_timer: u8,
 
-    /// 16-bit program counter
-    program_counter: u16,
-    update_pc: bool,
+    pc: u16,
+    sp: u8,
     // I/O
     // keyboard: Keyboard
 }
@@ -67,9 +57,8 @@ impl Default for Cpu {
             i: 0,
             _delay_timer: 0,
             _sound_timer: 0,
-            program_counter: 0x200,
-            update_pc: true,
-            stack_pointer: 0,
+            pc: 0x200,
+            sp: 0,
         }
     }
 }
@@ -90,23 +79,26 @@ impl Cpu {
         }
     }
 
+    pub fn refresh_screen(&self) -> bool {
+        self.vram_changed
+    }
+
+    pub fn vram(&self) -> &[[bool; HEIGHT]; WIDTH] {
+        &self.vram
+    }
+
     pub fn tick(&mut self) {
-        self.update_pc = true;
-        let opcode: Opcode = self.ram
-            [self.program_counter as usize..(self.program_counter + 2) as usize]
+        let opcode: Opcode = self.ram[self.pc as usize..(self.pc + 2) as usize]
             .try_into()
             .unwrap();
         println!("Opcode {}", &opcode);
         let instruction = Instruction::decode(opcode);
         self.run_instruction(&instruction);
-        if self.update_pc {
-            self.program_counter += 2
-        }
     }
 
     fn run_instruction(&mut self, instruction: &Instruction) {
-        match *instruction {
-            Instruction::Nop => (),
+        let jump = match *instruction {
+            Instruction::Nop => None,
             Instruction::Cls => self.i_00e0(),
             Instruction::Rts => self.i_00ee(),
             Instruction::Jmp { nnn } => self.i_1nnn(nnn),
@@ -120,18 +112,31 @@ impl Cpu {
             Instruction::Or { x, y } => self.i_8xy1(&x, &y),
             Instruction::And { x, y } => self.i_8xy2(&x, &y),
             Instruction::Xor { x, y } => self.i_8xy3(&x, &y),
-
+            Instruction::Addr { x, y } => self.i_8xy4(&x, &y),
+            Instruction::Sub { x, y } => self.i_8xy5(&x, &y),
+            Instruction::Shr { x, y } => self.i_8xy6(&x, &y),
+            Instruction::Shl { x, y } => self.i_8xyE(&x, &y),
             Instruction::Skrne { x, y } => self.i_9xy0(&x, &y),
             Instruction::Loadi { nnn } => self.i_annn(nnn),
+            Instruction::Jumpi { nnn } => self.i_bnnn(nnn),
             Instruction::Rand { x, kk } => self.i_cxkk(&x, &kk),
             Instruction::Draw { x, y, n } => self.i_dxyn(&x, &y, &n),
+            Instruction::Skpr { x } => self.i_ex9e(x),
+            Instruction::Skup { x } => self.i_exa1(x),
+            Instruction::Moved { x } => self.i_fx07(x),
             Instruction::Keyd { x } => self.i_fx0a(x),
-
+            Instruction::LOADD { x } => self.i_fx15(&x),
+            Instruction::LOADS { x } => self.i_fx18(&x),
             Instruction::Addi { x } => self.i_fx1e(&x),
             Instruction::Ldspr { x } => self.i_fx29(&x),
             Instruction::Bcd { x } => self.i_fx33(&x),
-            // Instruction::STOR{x} =>  self.i_fx55(x),
-            // Instruction::READ{x} =>  self.i_Fx65(x),
+            Instruction::Stor { x } => self.i_fx55(&x),
+            Instruction::Read { x } => self.i_fx65(&x),
+        };
+
+        match jump.unwrap_or(PC::Advance(1)) {
+            PC::Advance(i) => self.pc += 2 * i,
+            PC::Jump(nnn) => self.pc = nnn,
         };
     }
 }
@@ -145,9 +150,11 @@ impl Cpu {
 
     /// 0x00E0 - CLS
     /// Clear the display.
-    fn i_00e0(&mut self) {
+    fn i_00e0(&mut self) -> Option<PC> {
         self.vram = [[false; HEIGHT]; WIDTH];
-        self.vram_changed = true
+        self.vram_changed = true;
+
+        None
     }
 
     /// 00EE - RET
@@ -155,31 +162,31 @@ impl Cpu {
     ///
     /// The interpreter sets the program counter to the address at the top of the stack,
     /// then subtracts 1 from the stack pointer.
-    fn i_00ee(&mut self) {
-        self.program_counter = self.stack[self.stack_pointer as usize - 1];
-        self.stack_pointer -= 1;
+    fn i_00ee(&mut self) -> Option<PC> {
+        self.pc = self.stack[self.sp as usize - 1];
+        self.sp -= 1;
+
+        None
     }
 
     /// 1nnn - JP addr
     /// Jump to location nnn.
     ///
     /// The interpreter sets the program counter to nnn.
-    fn i_1nnn(&mut self, nnn: u16) {
-        self.program_counter = nnn;
-        self.update_pc = false;
+    fn i_1nnn(&mut self, nnn: u16) -> Option<PC> {
+        Some(PC::Jump(nnn))
     }
 
     /// 2NNN
     ///
     /// Execute subroutine starting at address NNN
-    fn i_2nnn(&mut self, nnn: u16) {
+    fn i_2nnn(&mut self, nnn: u16) -> Option<PC> {
         // push PC to the stack to return later
-        self.stack[self.stack_pointer as usize] = self.program_counter;
-        self.stack_pointer += 1;
+        self.stack[self.sp as usize] = self.pc;
+        self.sp += 1;
 
         // call the subroutine
-        self.program_counter = nnn;
-        self.update_pc = false;
+        Some(PC::Jump(nnn))
     }
 
     /// 3xkk - SE Vx, byte
@@ -187,88 +194,131 @@ impl Cpu {
     ///
     /// The interpreter compares register Vx to kk, and if they are equal, increments
     /// the program counter by 2.
-    fn i_3xkk(&mut self, x: &u8, kk: &u8) {
+    fn i_3xkk(&mut self, x: &u8, kk: &u8) -> Option<PC> {
         if self.v[*x as usize] == *kk {
-            self.program_counter += 4;
-            self.update_pc = false;
+            return Some(PC::Advance(2));
         }
+        None
     }
 
     /// Skip the following instruction if the value of register VX is not equal to NN
-    fn i_4xkk(&mut self, x: &u8, kk: &u8) {
+    fn i_4xkk(&mut self, x: &u8, kk: &u8) -> Option<PC> {
         if self.v[*x as usize] == *kk {
-            return;
+            return None;
         }
-        self.program_counter += 4;
-        self.update_pc = false;
+        Some(PC::Advance(2))
     }
 
     /// Skip the following instruction if the value of register VX is equal to the
     /// value of register VY
-    fn i_5xy0(&mut self, x: &u8, y: &u8) {
+    fn i_5xy0(&mut self, x: &u8, y: &u8) -> Option<PC> {
         if self.v[*x as usize] != self.v[*y as usize] {
-            return;
+            return None;
         }
-        self.program_counter += 4;
-        self.update_pc = false;
+        Some(PC::Advance(2))
     }
 
     /// 6xkk - LD Vx, byte
     /// Set Vx = kk.
     ///
     /// The interpreter puts the value kk into register Vx.
-    fn i_6xkk(&mut self, x: &u8, kk: u8) {
+    fn i_6xkk(&mut self, x: &u8, kk: u8) -> Option<PC> {
         self.v[*x as usize] = kk;
+        None
     }
 
     /// Set Vx = Vx + kk.
     ///
     /// Adds the value kk to the value of register Vx, then stores the result in Vx.
-    fn i_7xkk(&mut self, x: &u8, kk: &u8) {
+    fn i_7xkk(&mut self, x: &u8, kk: &u8) -> Option<PC> {
         self.v[*x as usize] = self.v[*x as usize].wrapping_add(*kk);
+        None
     }
 
     /// Store the value of register VY in register VX
-    fn i_8xy0(&mut self, x: &u8, y: &u8) {
+    fn i_8xy0(&mut self, x: &u8, y: &u8) -> Option<PC> {
         self.v[*x as usize] = self.v[*y as usize];
+        None
     }
 
     /// Set VX to VX OR VY
-    fn i_8xy1(&mut self, x: &u8, y: &u8) {
+    fn i_8xy1(&mut self, x: &u8, y: &u8) -> Option<PC> {
         self.v[*x as usize] |= self.v[*y as usize];
+        None
     }
 
     /// Set VX to VX AND VY
-    fn i_8xy2(&mut self, x: &u8, y: &u8) {
+    fn i_8xy2(&mut self, x: &u8, y: &u8) -> Option<PC> {
         self.v[*x as usize] &= self.v[*y as usize];
+        None
     }
 
     /// Set VX to VX XOR VY
-    fn i_8xy3(&mut self, x: &u8, y: &u8) {
+    fn i_8xy3(&mut self, x: &u8, y: &u8) -> Option<PC> {
         self.v[*x as usize] ^= self.v[*y as usize];
+        None
+    }
+
+    /// ADD VX, VY
+    ///
+    /// Set VX equal to VX plus VY. In the case of an overflow VF is set to 1.
+    /// Otherwise 0.
+    fn i_8xy4(&mut self, x: &u8, y: &u8) -> Option<PC> {
+        match self.v[*x as usize].checked_add(self.v[*y as usize]) {
+            None => self.v[0xF] = 1,
+            Some(_) => self.v[0xF] = 0,
+        }
+
+        self.v[*x as usize] = self.v[*x as usize].wrapping_add(self.v[*y as usize]);
+
+        None
+    }
+
+    /// SUB VX, VY
+    ///
+    /// Set VX equal to VX minus VY. In the case of an underflow VF is set 0.
+    /// Otherwise 1. (VF = VX > VY)
+    fn i_8xy5(&mut self, x: &u8, y: &u8) -> Option<PC> {
+        self.v[0xF] = (self.v[*x as usize] > self.v[*y as usize]) as u8;
+
+        self.v[*x as usize] = self.v[*x as usize].wrapping_sub(self.v[*y as usize]);
+
+        None
+    }
+
+    fn i_8xy6(&mut self, x: &u8, y: &u8) -> Option<PC> {
+        todo!()
+    }
+    fn i_8xyE(&mut self, x: &u8, y: &u8) -> Option<PC> {
+        todo!()
     }
 
     /// Skip the following instruction if the value of register VX is not equal to the
     /// value of register VY
-    fn i_9xy0(&mut self, x: &u8, y: &u8) {
+    fn i_9xy0(&mut self, x: &u8, y: &u8) -> Option<PC> {
         if self.v[*x as usize] == self.v[*y as usize] {
-            return;
+            return None;
         }
-        self.program_counter += 4;
-        self.update_pc = false;
+        Some(PC::Advance(2))
     }
 
     /// Annn - LD I, addr
     /// Set I = nnn.
     ///
     /// The value of register I is set to nnn.
-    fn i_annn(&mut self, nnn: u16) {
+    fn i_annn(&mut self, nnn: u16) -> Option<PC> {
         self.i = nnn;
+        None
+    }
+
+    fn i_bnnn(&mut self, nnn: u16) -> Option<PC> {
+        todo!()
     }
 
     /// Set VX to a random number with a mask of kk
-    fn i_cxkk(&mut self, x: &u8, kk: &u8) {
+    fn i_cxkk(&mut self, x: &u8, kk: &u8) -> Option<PC> {
         self.v[*x as usize] = utils::random_byte() & *kk;
+        None
     }
 
     /// Display n-byte sprite starting at memory location I at (Vx, Vy),
@@ -282,7 +332,7 @@ impl Cpu {
     /// display, it wraps around to the opposite side of the screen.
     /// See instruction 8xy3 for more information on XOR, and section 2.4, Display
     /// for more information on the Chip-8 screen and sprites.
-    fn i_dxyn(&mut self, x: &u8, y: &u8, n: &u8) {
+    fn i_dxyn(&mut self, x: &u8, y: &u8, n: &u8) -> Option<PC> {
         let vx = ((self.v[*x as usize] as usize) % WIDTH) as usize;
         let vy = ((self.v[*y as usize] as usize) % HEIGHT) as usize;
 
@@ -299,6 +349,18 @@ impl Cpu {
                 self.vram[xx][yy] ^= pixel_new;
             }
         }
+
+        None
+    }
+
+    fn i_ex9e(&mut self, _x: u8) -> Option<PC> {
+        todo!()
+    }
+    fn i_exa1(&mut self, _x: u8) -> Option<PC> {
+        todo!()
+    }
+    fn i_fx07(&mut self, _x: u8) -> Option<PC> {
+        todo!()
     }
 
     /// Fx0A - LD Vx, K
@@ -306,17 +368,24 @@ impl Cpu {
     ///
     /// All execution stops until a key is pressed, then the value of that key
     /// is stored in Vx.
-    fn i_fx0a(&mut self, _x: u8) {
-        self.update_pc = false;
+    fn i_fx0a(&mut self, _x: u8) -> Option<PC> {
         todo!("get keys");
+    }
+
+    fn i_fx15(&mut self, x: &u8) -> Option<PC> {
+        todo!()
+    }
+    fn i_fx18(&mut self, x: &u8) -> Option<PC> {
+        todo!()
     }
 
     /// Fx1E - ADD I, Vx
     /// Set I = I + Vx.
     ///
     /// The values of I and Vx are added, and the results are stored in I.
-    fn i_fx1e(&mut self, x: &u8) {
+    fn i_fx1e(&mut self, x: &u8) -> Option<PC> {
         self.i += self.v[*x as usize] as u16;
+        None
     }
 
     /// Fx29 - LD F, Vx
@@ -326,15 +395,16 @@ impl Cpu {
     /// corresponding to the value of Vx.
     /// See section 2.4, Display, for more information on the Chip-8
     /// hexadecimal font.
-    fn i_fx29(&mut self, x: &u8) {
-        self.i = (self.v[*x as usize] * 5) as u16 // 5 is the len of a digit
+    fn i_fx29(&mut self, x: &u8) -> Option<PC> {
+        self.i = (self.v[*x as usize] * 5) as u16; // 5 is the len of a digit
+        None
     }
 
     /// FX33
     ///
     /// Store the binary-coded decimal equivalent of the value stored in register VX at
     /// addresses I, I+1, and I+2.
-    fn i_fx33(&mut self, x: &u8) {
+    fn i_fx33(&mut self, x: &u8) -> Option<PC> {
         let mut byte = self.v[*x as usize];
 
         // first figure
@@ -347,6 +417,15 @@ impl Cpu {
         // third figure
         byte /= 10;
         self.ram[self.i as usize] = byte.rem_euclid(10);
+
+        None
+    }
+
+    fn i_fx55(&mut self, x: &u8) -> Option<PC> {
+        todo!()
+    }
+    fn i_fx65(&mut self, x: &u8) -> Option<PC> {
+        todo!()
     }
 }
 
@@ -405,6 +484,11 @@ impl fmt::Display for Opcode {
     }
 }
 
+enum PC {
+    Advance(u16), // number of positions
+    Jump(u16),
+}
+
 mod utils {
     pub fn random_byte() -> u8 {
         rand::random()
@@ -439,7 +523,7 @@ mod tests {
     #[test]
     fn test_4xnn_skip_instruction() {
         let mut cpu = create_cpu();
-        assert_eq!(cpu.program_counter, 0x200);
+        assert_eq!(cpu.pc, 0x200);
 
         // fifth register is not 0x2A
         cpu.v[5] = 2;
@@ -448,28 +532,28 @@ mod tests {
 
         cpu.tick();
 
-        assert_eq!(cpu.program_counter, 0x204);
+        assert_eq!(cpu.pc, 0x204);
     }
 
     /// if v[x] == nn => don't skip following instruction
     #[test]
     fn test_4xnn_do_not_skip_instruction() {
         let mut cpu = create_cpu();
-        assert_eq!(cpu.program_counter, 0x200);
+        assert_eq!(cpu.pc, 0x200);
         cpu.v[5] = 0x2A;
         let rom: &[u8] = &[0x45, 0x2A];
         cpu.load_rom(rom);
 
         cpu.tick();
 
-        assert_eq!(cpu.program_counter, 0x202);
+        assert_eq!(cpu.pc, 0x202);
     }
 
     /// if v[x] == v[y] => skip following instruction
     #[test]
     fn test_5xy0_skip_instruction() {
         let mut cpu = create_cpu();
-        assert_eq!(cpu.program_counter, 0x200);
+        assert_eq!(cpu.pc, 0x200);
 
         cpu.v[5] = 2;
         cpu.v[4] = 2;
@@ -478,14 +562,14 @@ mod tests {
 
         cpu.tick();
 
-        assert_eq!(cpu.program_counter, 0x204);
+        assert_eq!(cpu.pc, 0x204);
     }
 
     /// if v[x] != v[y] => do not skip following instruction
     #[test]
     fn test_5xy0_do_skip_instruction() {
         let mut cpu = create_cpu();
-        assert_eq!(cpu.program_counter, 0x200);
+        assert_eq!(cpu.pc, 0x200);
 
         cpu.v[5] = 2;
         cpu.v[4] = 5;
@@ -494,7 +578,7 @@ mod tests {
 
         cpu.tick();
 
-        assert_eq!(cpu.program_counter, 0x202);
+        assert_eq!(cpu.pc, 0x202);
     }
 
     // Store the value of register VY in register VX
@@ -507,7 +591,7 @@ mod tests {
         cpu.tick();
         assert_eq!(cpu.v[4], 2);
         assert_eq!(cpu.v[5], 2);
-        assert_eq!(cpu.program_counter, 0x202);
+        assert_eq!(cpu.pc, 0x202);
     }
 
     /// Set VX to VX OR VY
@@ -523,7 +607,7 @@ mod tests {
 
         assert_eq!(cpu.v[4], 0b1011);
         assert_eq!(cpu.v[5], 0b1010);
-        assert_eq!(cpu.program_counter, 0x202);
+        assert_eq!(cpu.pc, 0x202);
     }
 
     /// Set VX to VX AND VY
@@ -539,7 +623,7 @@ mod tests {
 
         assert_eq!(cpu.v[4], 0b1000);
         assert_eq!(cpu.v[5], 0b1010);
-        assert_eq!(cpu.program_counter, 0x202);
+        assert_eq!(cpu.pc, 0x202);
     }
 
     /// Set VX to VX XOR VY
@@ -555,7 +639,7 @@ mod tests {
 
         assert_eq!(cpu.v[4], 0b0011);
         assert_eq!(cpu.v[5], 0b1010);
-        assert_eq!(cpu.program_counter, 0x202);
+        assert_eq!(cpu.pc, 0x202);
     }
 
     /// if v[x] != v[y] => skip following instruction
@@ -563,7 +647,7 @@ mod tests {
     fn test_9xy0_skip_instruction() {
         let mut cpu = create_cpu();
         cpu.load_fonts();
-        assert_eq!(cpu.program_counter, 0x200);
+        assert_eq!(cpu.pc, 0x200);
 
         cpu.v[5] = 2;
         cpu.v[4] = 5;
@@ -572,7 +656,7 @@ mod tests {
 
         cpu.tick();
 
-        assert_eq!(cpu.program_counter, 0x204);
+        assert_eq!(cpu.pc, 0x204);
     }
 
     /// if v[x] == v[y] => do not skip following instruction
@@ -580,7 +664,7 @@ mod tests {
     fn test_9xy0_do_skip_instruction() {
         let mut cpu = create_cpu();
         cpu.load_fonts();
-        assert_eq!(cpu.program_counter, 0x200);
+        assert_eq!(cpu.pc, 0x200);
 
         cpu.v[5] = 2;
         cpu.v[4] = 2;
@@ -589,6 +673,6 @@ mod tests {
 
         cpu.tick();
 
-        assert_eq!(cpu.program_counter, 0x202);
+        assert_eq!(cpu.pc, 0x202);
     }
 }

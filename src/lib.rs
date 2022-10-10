@@ -36,8 +36,8 @@ impl Chip8 {
 
         while self.screen.running {
             self.cpu.tick();
-            if self.cpu.vram_changed {
-                self.screen.tick(self.cpu.vram);
+            if self.cpu.refresh_screen() {
+                self.screen.tick(self.cpu.vram());
             }
             ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
         }
