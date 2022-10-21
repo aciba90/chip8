@@ -115,7 +115,7 @@ impl Cpu {
             Instruction::Addr { x, y } => self.i_8xy4(&x, &y),
             Instruction::Sub { x, y } => self.i_8xy5(&x, &y),
             Instruction::Shr { x, y } => self.i_8xy6(&x, &y),
-            Instruction::Shl { x, y } => self.i_8xyE(&x, &y),
+            Instruction::Shl { x, y } => self.i_8xye(&x, &y),
             Instruction::Skrne { x, y } => self.i_9xy0(&x, &y),
             Instruction::Loadi { nnn } => self.i_annn(nnn),
             Instruction::Jumpi { nnn } => self.i_bnnn(nnn),
@@ -125,8 +125,8 @@ impl Cpu {
             Instruction::Skup { x } => self.i_exa1(x),
             Instruction::Moved { x } => self.i_fx07(x),
             Instruction::Keyd { x } => self.i_fx0a(x),
-            Instruction::LOADD { x } => self.i_fx15(&x),
-            Instruction::LOADS { x } => self.i_fx18(&x),
+            Instruction::Loadd { x } => self.i_fx15(&x),
+            Instruction::Loads { x } => self.i_fx18(&x),
             Instruction::Addi { x } => self.i_fx1e(&x),
             Instruction::Ldspr { x } => self.i_fx29(&x),
             Instruction::Bcd { x } => self.i_fx33(&x),
@@ -286,11 +286,31 @@ impl Cpu {
         None
     }
 
+    /// Store the value of register VY shifted right one bit in register VX
+    /// Set register VF to the least significant bit prior to the shift
     fn i_8xy6(&mut self, x: &u8, y: &u8) -> Option<PC> {
-        todo!()
+        self.v[0xF_usize] = if (self.v[*y as usize] & 0x01) == 0 {
+            0_u8
+        } else {
+            1_u8
+        };
+
+        self.v[*x as usize] = self.v[*y as usize] >> 1;
+
+        None
     }
-    fn i_8xyE(&mut self, x: &u8, y: &u8) -> Option<PC> {
-        todo!()
+
+    /// Store the value of register VY shifted left one bit in register VX
+    /// Set register VF to the most significant bit prior to the shift
+    fn i_8xye(&mut self, x: &u8, y: &u8) -> Option<PC> {
+        self.v[0xF_usize] = if (self.v[*y as usize] & 0x80) == 0 {
+            0_u8
+        } else {
+            1_u8
+        };
+        self.v[*x as usize] = self.v[*y as usize] << 1;
+
+        None
     }
 
     /// Skip the following instruction if the value of register VX is not equal to the
@@ -353,9 +373,14 @@ impl Cpu {
         None
     }
 
+    /// Skip the following instruction if the key corresponding to the hex value currently stored
+    /// in register VX is pressed
     fn i_ex9e(&mut self, _x: u8) -> Option<PC> {
         todo!()
     }
+
+    /// Skip the following instruction if the key corresponding to the hex value currently stored
+    /// in register VX is not pressed
     fn i_exa1(&mut self, _x: u8) -> Option<PC> {
         todo!()
     }
@@ -421,11 +446,27 @@ impl Cpu {
         None
     }
 
+    /// Store the values of registers V0 to VX inclusive in memory starting at address I
+    /// I is set to I + X + 1 after operation
     fn i_fx55(&mut self, x: &u8) -> Option<PC> {
-        todo!()
+        for i in 0..=*x {
+            self.ram[(self.i as usize) + (i as usize)] = self.v[i as usize];
+        }
+        self.i += *x as u16 + 1;
+
+        None
     }
+
+    /// Fill registers V0 to VX inclusive with the values stored in memory starting at address I
+    /// I is set to I + X + 1 after operation
     fn i_fx65(&mut self, x: &u8) -> Option<PC> {
-        todo!()
+        for i in 0..=*x {
+            self.v[i as usize] = self.ram[(self.i as usize) + (i as usize)];
+        }
+
+        self.i += *x as u16 + 1;
+
+        None
     }
 }
 
