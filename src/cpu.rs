@@ -37,11 +37,11 @@ pub struct Cpu {
     v: [u8; 16],
     i: u16,
 
+    pc: usize, // Required u16, but usize for ease of indexing
+    sp: usize, // Required u8, but usize for ease of indexing
+
     _delay_timer: u8,
     _sound_timer: u8,
-
-    pc: u16,
-    sp: u8,
     // I/O
     // keyboard: Keyboard
 }
@@ -135,8 +135,8 @@ impl Cpu {
         };
 
         match jump.unwrap_or(PC::Advance(1)) {
-            PC::Advance(i) => self.pc += 2 * i,
-            PC::Jump(nnn) => self.pc = nnn,
+            PC::Advance(i) => self.pc += 2_usize * i as usize,
+            PC::Jump(nnn) => self.pc = nnn as usize,
         };
     }
 }
@@ -163,7 +163,7 @@ impl Cpu {
     /// The interpreter sets the program counter to the address at the top of the stack,
     /// then subtracts 1 from the stack pointer.
     fn i_00ee(&mut self) -> Option<PC> {
-        self.pc = self.stack[self.sp as usize - 1];
+        self.pc = self.stack[self.sp as usize - 1] as usize;
         self.sp -= 1;
 
         None
@@ -182,7 +182,7 @@ impl Cpu {
     /// Execute subroutine starting at address NNN
     fn i_2nnn(&mut self, nnn: u16) -> Option<PC> {
         // push PC to the stack to return later
-        self.stack[self.sp as usize] = self.pc;
+        self.stack[self.sp as usize] = self.pc.try_into().expect("pc must always fit within a u16");
         self.sp += 1;
 
         // call the subroutine
