@@ -1,6 +1,7 @@
 pub mod args;
 mod constants;
 mod cpu;
+mod keyboard;
 mod screen;
 
 extern crate sdl2;
@@ -12,21 +13,19 @@ use std::time::Duration;
 pub struct Chip8 {
     cpu: cpu::Cpu,
     screen: screen::Screen,
-    // TODO keyboard
-    /*
-    1	2	3	C
-    4	5	6	D
-    7	8	9	E
-    A	0	B	F
-    */
+    keyboard: keyboard::Keyboard,
 }
 
 impl Chip8 {
     pub fn new(scale: u8) -> Chip8 {
-        let screen = screen::Screen::new(scale as usize);
+        let sdl_context = sdl2::init().unwrap();
+        let screen = screen::Screen::new(&sdl_context, scale as usize);
+        let keyboard = keyboard::Keyboard::new(&sdl_context);
+
         Chip8 {
             cpu: cpu::Cpu::default(),
             screen,
+            keyboard,
         }
     }
 
@@ -34,7 +33,15 @@ impl Chip8 {
         let rom: Vec<u8> = fs::read(rom).expect("No file found");
         self.cpu.load_rom(&rom);
 
-        while self.screen.running {
+        'main: loop {
+            let pressed_keys = self.keyboard.pressed_keys();
+
+            for key in pressed_keys.into_iter() {
+                if let keyboard::Key::Exit = key {
+                    break 'main;
+                };
+            }
+
             self.cpu.tick();
             if self.cpu.refresh_screen() {
                 self.screen.tick(self.cpu.vram());
