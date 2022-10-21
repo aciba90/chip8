@@ -36,13 +36,13 @@ impl Chip8 {
         'main: loop {
             let pressed_keys = self.keyboard.pressed_keys();
 
-            for key in pressed_keys.into_iter() {
+            for key in pressed_keys.iter() {
                 if let keyboard::Key::Exit = key {
                     break 'main;
                 };
             }
 
-            self.cpu.tick();
+            self.cpu.tick(pressed_keys);
             if self.cpu.refresh_screen() {
                 self.screen.tick(self.cpu.vram());
             }

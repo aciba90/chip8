@@ -2,7 +2,11 @@ mod instructions;
 
 use instructions::Instruction;
 
-use crate::constants::{HEIGHT, WIDTH};
+use crate::{
+    constants::{HEIGHT, WIDTH},
+    keyboard::{self, Key},
+};
+use std::convert::*;
 use std::fmt;
 
 const FONTS: [u8; 80] = [
@@ -87,16 +91,16 @@ impl Cpu {
         &self.vram
     }
 
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self, pressed_keys: Vec<keyboard::Key>) {
         let opcode: Opcode = self.ram[self.pc as usize..(self.pc + 2) as usize]
             .try_into()
             .unwrap();
         println!("Opcode {}", &opcode);
         let instruction = Instruction::decode(opcode);
-        self.run_instruction(&instruction);
+        self.run_instruction(&instruction, pressed_keys);
     }
 
-    fn run_instruction(&mut self, instruction: &Instruction) {
+    fn run_instruction(&mut self, instruction: &Instruction, pressed_keys: Vec<keyboard::Key>) {
         let jump = match *instruction {
             Instruction::Nop => None,
             Instruction::Cls => self.i_00e0(),
@@ -124,7 +128,7 @@ impl Cpu {
             Instruction::Skpr { x } => self.i_ex9e(x),
             Instruction::Skup { x } => self.i_exa1(x),
             Instruction::Moved { x } => self.i_fx07(x),
-            Instruction::Keyd { x } => self.i_fx0a(x),
+            Instruction::Keyd { x } => self.i_fx0a(&x, pressed_keys),
             Instruction::Loadd { x } => self.i_fx15(&x),
             Instruction::Loads { x } => self.i_fx18(&x),
             Instruction::Addi { x } => self.i_fx1e(&x),
@@ -135,6 +139,7 @@ impl Cpu {
         };
 
         match jump.unwrap_or(PC::Advance(1)) {
+            PC::Wait => (),
             PC::Advance(i) => self.pc += 2_usize * i as usize,
             PC::Jump(nnn) => self.pc = nnn as usize,
         };
@@ -393,8 +398,19 @@ impl Cpu {
     ///
     /// All execution stops until a key is pressed, then the value of that key
     /// is stored in Vx.
-    fn i_fx0a(&mut self, _x: u8) -> Option<PC> {
-        todo!("get keys");
+    fn i_fx0a(&mut self, x: &u8, pressed_keys: Vec<keyboard::Key>) -> Option<PC> {
+        let key = pressed_keys
+            .into_iter()
+            .filter(|k| !matches!(k, Key::Exit))
+            .next();
+
+        match key {
+            None | Some(Key::Exit) => Some(PC::Wait),
+            Some(k) => {
+                self.v[*x as usize] = k.into();
+                None
+            }
+        }
     }
 
     fn i_fx15(&mut self, x: &u8) -> Option<PC> {
@@ -526,6 +542,7 @@ impl fmt::Display for Opcode {
 }
 
 enum PC {
+    Wait,
     Advance(u16), // number of positions
     Jump(u16),
 }

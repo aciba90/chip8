@@ -9,7 +9,47 @@ use sdl2::keyboard::Keycode;
 /// A	0	B	F
 ///
 pub enum Key {
+    Num0,
+    Num1,
+    Num2,
+    Num3,
+    Num4,
+    Num5,
+    Num6,
+    Num7,
+    Num8,
+    Num9,
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
     Exit,
+}
+
+impl From<Key> for u8 {
+    fn from(key: Key) -> u8 {
+        match key {
+            Num0 => 0,
+            Num1 => 1,
+            Num2 => 2,
+            Num3 => 3,
+            Num4 => 4,
+            Num5 => 5,
+            Num6 => 6,
+            Num7 => 7,
+            Num8 => 8,
+            Num9 => 9,
+            A => 10,
+            B => 11,
+            C => 12,
+            D => 13,
+            E => 14,
+            F => 15,
+            Exit => 16, // XXX This should probably fail => TryInto
+        }
+    }
 }
 
 pub struct Keyboard {
@@ -38,7 +78,34 @@ impl Keyboard {
                     println!("Quitting screen...");
                     keys.push(Key::Exit);
                 }
-                _ => {}
+                Event::KeyDown {
+                    keycode: Some(keycode),
+                    ..
+                } => {
+                    let key = match keycode {
+                        Keycode::Num0 => Some(Key::Num0),
+                        Keycode::Num1 => Some(Key::Num1),
+                        Keycode::Num2 => Some(Key::Num2),
+                        Keycode::Num3 => Some(Key::Num3),
+                        Keycode::Num4 => Some(Key::Num4),
+                        Keycode::Num5 => Some(Key::Num5),
+                        Keycode::Num6 => Some(Key::Num6),
+                        Keycode::Num7 => Some(Key::Num7),
+                        Keycode::Num8 => Some(Key::Num8),
+                        Keycode::Num9 => Some(Key::Num9),
+                        Keycode::A => Some(Key::A),
+                        Keycode::B => Some(Key::B),
+                        Keycode::C => Some(Key::C),
+                        Keycode::D => Some(Key::D),
+                        Keycode::E => Some(Key::E),
+                        Keycode::F => Some(Key::F),
+                        _ => None,
+                    };
+                    if let Some(k) = key {
+                        keys.push(k);
+                    };
+                }
+                _ => (),
             };
         }
 
