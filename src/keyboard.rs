@@ -3,10 +3,10 @@ use sdl2::keyboard::Keycode;
 
 /// Represents available keyboards keys plus the exit one.
 ///
-/// 1	2	3	C
-/// 4	5	6	D
-/// 7	8	9	E
-/// A	0	B	F
+/// 1  2  3  C
+/// 4  5  6  D
+/// 7  8  9  E
+/// A  0  B  F
 ///
 pub enum Key {
     Num0,
@@ -31,23 +31,23 @@ pub enum Key {
 impl From<Key> for u8 {
     fn from(key: Key) -> u8 {
         match key {
-            Num0 => 0,
-            Num1 => 1,
-            Num2 => 2,
-            Num3 => 3,
-            Num4 => 4,
-            Num5 => 5,
-            Num6 => 6,
-            Num7 => 7,
-            Num8 => 8,
-            Num9 => 9,
-            A => 10,
-            B => 11,
-            C => 12,
-            D => 13,
-            E => 14,
-            F => 15,
-            Exit => 16, // XXX This should probably fail => TryInto
+            Key::Num0 => 0,
+            Key::Num1 => 1,
+            Key::Num2 => 2,
+            Key::Num3 => 3,
+            Key::Num4 => 4,
+            Key::Num5 => 5,
+            Key::Num6 => 6,
+            Key::Num7 => 7,
+            Key::Num8 => 8,
+            Key::Num9 => 9,
+            Key::A => 10,
+            Key::B => 11,
+            Key::C => 12,
+            Key::D => 13,
+            Key::E => 14,
+            Key::F => 15,
+            Key::Exit => 16, // XXX This should probably fail => TryInto
         }
     }
 }

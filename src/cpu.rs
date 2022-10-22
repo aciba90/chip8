@@ -336,7 +336,7 @@ impl Cpu {
         None
     }
 
-    fn i_bnnn(&mut self, nnn: u16) -> Option<PC> {
+    fn i_bnnn(&mut self, _nnn: u16) -> Option<PC> {
         todo!()
     }
 
@@ -399,10 +399,7 @@ impl Cpu {
     /// All execution stops until a key is pressed, then the value of that key
     /// is stored in Vx.
     fn i_fx0a(&mut self, x: &u8, pressed_keys: Vec<keyboard::Key>) -> Option<PC> {
-        let key = pressed_keys
-            .into_iter()
-            .filter(|k| !matches!(k, Key::Exit))
-            .next();
+        let key = pressed_keys.into_iter().find(|k| !matches!(k, Key::Exit));
 
         match key {
             None | Some(Key::Exit) => Some(PC::Wait),
@@ -413,10 +410,10 @@ impl Cpu {
         }
     }
 
-    fn i_fx15(&mut self, x: &u8) -> Option<PC> {
+    fn i_fx15(&mut self, _x: &u8) -> Option<PC> {
         todo!()
     }
-    fn i_fx18(&mut self, x: &u8) -> Option<PC> {
+    fn i_fx18(&mut self, _x: &u8) -> Option<PC> {
         todo!()
     }
 
@@ -564,6 +561,8 @@ mod tests {
         cpu
     }
 
+    const NO_KEYS: Vec<Key> = vec![];
+
     #[test]
     fn clear_screen_00e0() {
         let mut cpu = create_cpu();
@@ -588,7 +587,7 @@ mod tests {
         let rom: &[u8] = &[0x45, 0x2A];
         cpu.load_rom(rom);
 
-        cpu.tick();
+        cpu.tick(NO_KEYS);
 
         assert_eq!(cpu.pc, 0x204);
     }
@@ -602,7 +601,7 @@ mod tests {
         let rom: &[u8] = &[0x45, 0x2A];
         cpu.load_rom(rom);
 
-        cpu.tick();
+        cpu.tick(NO_KEYS);
 
         assert_eq!(cpu.pc, 0x202);
     }
@@ -618,7 +617,7 @@ mod tests {
         let rom: &[u8] = &[0x54, 0x50];
         cpu.load_rom(rom);
 
-        cpu.tick();
+        cpu.tick(NO_KEYS);
 
         assert_eq!(cpu.pc, 0x204);
     }
@@ -634,7 +633,7 @@ mod tests {
         let rom: &[u8] = &[0x54, 0x50];
         cpu.load_rom(rom);
 
-        cpu.tick();
+        cpu.tick(NO_KEYS);
 
         assert_eq!(cpu.pc, 0x202);
     }
@@ -646,7 +645,7 @@ mod tests {
         cpu.v[5] = 2;
         let rom: &[u8] = &[0x84, 0x50];
         cpu.load_rom(rom);
-        cpu.tick();
+        cpu.tick(NO_KEYS);
         assert_eq!(cpu.v[4], 2);
         assert_eq!(cpu.v[5], 2);
         assert_eq!(cpu.pc, 0x202);
@@ -661,7 +660,7 @@ mod tests {
         let rom: &[u8] = &[0x84, 0x51];
         cpu.load_rom(rom);
 
-        cpu.tick();
+        cpu.tick(NO_KEYS);
 
         assert_eq!(cpu.v[4], 0b1011);
         assert_eq!(cpu.v[5], 0b1010);
@@ -677,7 +676,7 @@ mod tests {
         let rom: &[u8] = &[0x84, 0x52];
         cpu.load_rom(rom);
 
-        cpu.tick();
+        cpu.tick(NO_KEYS);
 
         assert_eq!(cpu.v[4], 0b1000);
         assert_eq!(cpu.v[5], 0b1010);
@@ -693,7 +692,7 @@ mod tests {
         let rom: &[u8] = &[0x84, 0x53];
         cpu.load_rom(rom);
 
-        cpu.tick();
+        cpu.tick(NO_KEYS);
 
         assert_eq!(cpu.v[4], 0b0011);
         assert_eq!(cpu.v[5], 0b1010);
@@ -712,7 +711,7 @@ mod tests {
         let rom: &[u8] = &[0x94, 0x50];
         cpu.load_rom(rom);
 
-        cpu.tick();
+        cpu.tick(NO_KEYS);
 
         assert_eq!(cpu.pc, 0x204);
     }
@@ -729,7 +728,7 @@ mod tests {
         let rom: &[u8] = &[0x94, 0x50];
         cpu.load_rom(rom);
 
-        cpu.tick();
+        cpu.tick(NO_KEYS);
 
         assert_eq!(cpu.pc, 0x202);
     }
