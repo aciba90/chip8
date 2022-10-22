@@ -38,6 +38,7 @@ impl Chip8 {
 
             for key in pressed_keys.iter() {
                 if let keyboard::Key::Exit = key {
+                    log::info!("Exit key pressed...");
                     break 'main;
                 };
             }

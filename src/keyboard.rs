@@ -74,8 +74,6 @@ impl Keyboard {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => {
-                    // XXX log message
-                    println!("Quitting screen...");
                     keys.push(Key::Exit);
                 }
                 Event::KeyDown {

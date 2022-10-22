@@ -95,7 +95,7 @@ impl Cpu {
         let opcode: Opcode = self.ram[self.pc as usize..(self.pc + 2) as usize]
             .try_into()
             .unwrap();
-        println!("Opcode {}", &opcode);
+        log::debug!("Opcode {}", &opcode);
         let instruction = Instruction::decode(opcode);
         self.run_instruction(&instruction, pressed_keys);
     }
