@@ -46,8 +46,6 @@ pub struct Cpu {
 
     delay_timer: u8,
     sound_timer: u8,
-    // I/O
-    // keyboard: Keyboard
 }
 
 impl Default for Cpu {
@@ -92,6 +90,8 @@ impl Cpu {
     }
 
     pub fn decrease_timers(&mut self) {
+        // XXX: This couples frequency's timers with cpu's frequency.
+        // In theory these timers must run at a 60HZ frequency, independently from cpu's freq.
         if self.delay_timer > 0 {
             self.delay_timer -= 1;
         }
@@ -101,6 +101,7 @@ impl Cpu {
     }
 
     pub fn tick(&mut self, pressed_keys: Vec<keyboard::Key>) {
+        self.vram_changed = false;
         let opcode: Opcode = self.ram[self.pc as usize..(self.pc + 2) as usize]
             .try_into()
             .unwrap();
@@ -131,7 +132,7 @@ impl Cpu {
             Instruction::Shl { x, y } => self.i_8xye(&x, &y),
             Instruction::Skrne { x, y } => self.i_9xy0(&x, &y),
             Instruction::Loadi { nnn } => self.i_annn(nnn),
-            Instruction::Jumpi { nnn } => self.i_bnnn(nnn),
+            Instruction::Jumpi { nnn } => self.i_bnnn(&nnn),
             Instruction::Rand { x, kk } => self.i_cxkk(&x, &kk),
             Instruction::Draw { x, y, n } => self.i_dxyn(&x, &y, &n),
             Instruction::Skpr { x } => self.i_ex9e(&x, pressed_keys),
@@ -343,8 +344,8 @@ impl Cpu {
     }
 
     /// Jump to address NNN + V0
-    fn i_bnnn(&mut self, nnn: u16) -> Option<PC> {
-        Some(PC::Jump(nnn + self.v[0] as u16))
+    fn i_bnnn(&mut self, nnn: &u16) -> Option<PC> {
+        Some(PC::Jump(*nnn + self.v[0] as u16))
     }
 
     /// Set VX to a random number with a mask of kk
@@ -365,6 +366,8 @@ impl Cpu {
     /// See instruction 8xy3 for more information on XOR, and section 2.4, Display
     /// for more information on the Chip-8 screen and sprites.
     fn i_dxyn(&mut self, x: &u8, y: &u8, n: &u8) -> Option<PC> {
+        self.vram_changed = true;
+
         let vx = ((self.v[*x as usize] as usize) % WIDTH) as usize;
         let vy = ((self.v[*y as usize] as usize) % HEIGHT) as usize;
 
@@ -587,6 +590,7 @@ mod tests {
     fn create_cpu() -> Cpu {
         let mut cpu = Cpu::default();
         cpu.load_fonts();
+        assert_eq!(cpu.pc, 0x200);
 
         cpu
     }
@@ -610,7 +614,6 @@ mod tests {
     #[test]
     fn test_4xnn_skip_instruction() {
         let mut cpu = create_cpu();
-        assert_eq!(cpu.pc, 0x200);
 
         // fifth register is not 0x2A
         cpu.v[5] = 2;
@@ -626,7 +629,7 @@ mod tests {
     #[test]
     fn test_4xnn_do_not_skip_instruction() {
         let mut cpu = create_cpu();
-        assert_eq!(cpu.pc, 0x200);
+
         cpu.v[5] = 0x2A;
         let rom: &[u8] = &[0x45, 0x2A];
         cpu.load_rom(rom);
@@ -640,7 +643,6 @@ mod tests {
     #[test]
     fn test_5xy0_skip_instruction() {
         let mut cpu = create_cpu();
-        assert_eq!(cpu.pc, 0x200);
 
         cpu.v[5] = 2;
         cpu.v[4] = 2;
@@ -656,7 +658,6 @@ mod tests {
     #[test]
     fn test_5xy0_do_skip_instruction() {
         let mut cpu = create_cpu();
-        assert_eq!(cpu.pc, 0x200);
 
         cpu.v[5] = 2;
         cpu.v[4] = 5;
@@ -672,6 +673,7 @@ mod tests {
     #[test]
     fn test_8xy0() {
         let mut cpu = create_cpu();
+
         cpu.v[5] = 2;
         let rom: &[u8] = &[0x84, 0x50];
         cpu.load_rom(rom);
@@ -685,6 +687,7 @@ mod tests {
     #[test]
     fn test_8xy1() {
         let mut cpu = create_cpu();
+
         cpu.v[4] = 0b1001;
         cpu.v[5] = 0b1010;
         let rom: &[u8] = &[0x84, 0x51];
@@ -733,8 +736,6 @@ mod tests {
     #[test]
     fn test_9xy0_skip_instruction() {
         let mut cpu = create_cpu();
-        cpu.load_fonts();
-        assert_eq!(cpu.pc, 0x200);
 
         cpu.v[5] = 2;
         cpu.v[4] = 5;
@@ -750,8 +751,6 @@ mod tests {
     #[test]
     fn test_9xy0_do_skip_instruction() {
         let mut cpu = create_cpu();
-        cpu.load_fonts();
-        assert_eq!(cpu.pc, 0x200);
 
         cpu.v[5] = 2;
         cpu.v[4] = 2;
@@ -766,8 +765,6 @@ mod tests {
     #[test]
     fn test_ex9e_skips() {
         let mut cpu = create_cpu();
-        cpu.load_fonts();
-        assert_eq!(cpu.pc, 0x200);
 
         cpu.v[1] = 2;
         let rom: &[u8] = &[0xe1, 0x9e];
@@ -782,8 +779,6 @@ mod tests {
     #[test]
     fn test_ex9e_does_not_skip() {
         let mut cpu = create_cpu();
-        cpu.load_fonts();
-        assert_eq!(cpu.pc, 0x200);
 
         cpu.v[1] = 3;
         let rom: &[u8] = &[0xe1, 0x9e];
