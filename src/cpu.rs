@@ -125,8 +125,8 @@ impl Cpu {
             Instruction::Jumpi { nnn } => self.i_bnnn(nnn),
             Instruction::Rand { x, kk } => self.i_cxkk(&x, &kk),
             Instruction::Draw { x, y, n } => self.i_dxyn(&x, &y, &n),
-            Instruction::Skpr { x } => self.i_ex9e(x),
-            Instruction::Skup { x } => self.i_exa1(x),
+            Instruction::Skpr { x } => self.i_ex9e(&x, pressed_keys),
+            Instruction::Skup { x } => self.i_exa1(&x, pressed_keys),
             Instruction::Moved { x } => self.i_fx07(x),
             Instruction::Keyd { x } => self.i_fx0a(&x, pressed_keys),
             Instruction::Loadd { x } => self.i_fx15(&x),
@@ -269,6 +269,8 @@ impl Cpu {
     /// Set VX equal to VX plus VY. In the case of an overflow VF is set to 1.
     /// Otherwise 0.
     fn i_8xy4(&mut self, x: &u8, y: &u8) -> Option<PC> {
+        // XXX: This can be optimized by using `overflowing_add`.
+
         match self.v[*x as usize].checked_add(self.v[*y as usize]) {
             None => self.v[0xF] = 1,
             Some(_) => self.v[0xF] = 0,
@@ -380,15 +382,34 @@ impl Cpu {
 
     /// Skip the following instruction if the key corresponding to the hex value currently stored
     /// in register VX is pressed
-    fn i_ex9e(&mut self, _x: u8) -> Option<PC> {
-        todo!()
+    fn i_ex9e(&mut self, x: &u8, pressed_keys: Vec<keyboard::Key>) -> Option<PC> {
+        let expected_key = self.v[*x as usize];
+
+        if pressed_keys
+            .into_iter()
+            .any(|k| u8::from(k) == expected_key)
+        {
+            Some(PC::Advance(2))
+        } else {
+            Some(PC::Advance(1))
+        }
     }
 
     /// Skip the following instruction if the key corresponding to the hex value currently stored
     /// in register VX is not pressed
-    fn i_exa1(&mut self, _x: u8) -> Option<PC> {
-        todo!()
+    fn i_exa1(&mut self, x: &u8, pressed_keys: Vec<keyboard::Key>) -> Option<PC> {
+        let expected_key = self.v[*x as usize];
+
+        if pressed_keys
+            .into_iter()
+            .all(|k| u8::from(k) != expected_key)
+        {
+            Some(PC::Advance(2))
+        } else {
+            Some(PC::Advance(1))
+        }
     }
+
     fn i_fx07(&mut self, _x: u8) -> Option<PC> {
         todo!()
     }
@@ -410,9 +431,12 @@ impl Cpu {
         }
     }
 
-    fn i_fx15(&mut self, _x: &u8) -> Option<PC> {
-        todo!()
+    /// Add the value stored in register VX to register I
+    fn i_fx15(&mut self, x: &u8) -> Option<PC> {
+        self.i = self.i.wrapping_add(self.v[*x as usize] as u16);
+        None
     }
+
     fn i_fx18(&mut self, _x: &u8) -> Option<PC> {
         todo!()
     }
@@ -729,6 +753,38 @@ mod tests {
         cpu.load_rom(rom);
 
         cpu.tick(NO_KEYS);
+
+        assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_ex9e_skips() {
+        let mut cpu = create_cpu();
+        cpu.load_fonts();
+        assert_eq!(cpu.pc, 0x200);
+
+        cpu.v[1] = 2;
+        let rom: &[u8] = &[0xe1, 0x9e];
+        cpu.load_rom(rom);
+
+        let keys = vec![Key::Num0, Key::Num2];
+        cpu.tick(keys);
+
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn test_ex9e_does_not_skip() {
+        let mut cpu = create_cpu();
+        cpu.load_fonts();
+        assert_eq!(cpu.pc, 0x200);
+
+        cpu.v[1] = 3;
+        let rom: &[u8] = &[0xe1, 0x9e];
+        cpu.load_rom(rom);
+
+        let keys = vec![Key::Num0, Key::Num2];
+        cpu.tick(keys);
 
         assert_eq!(cpu.pc, 0x202);
     }

@@ -52,6 +52,31 @@ impl From<Key> for u8 {
     }
 }
 
+impl From<u8> for Key {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Key::Num0,
+            1 => Key::Num1,
+            2 => Key::Num2,
+            3 => Key::Num3,
+            4 => Key::Num4,
+            5 => Key::Num5,
+            6 => Key::Num6,
+            7 => Key::Num7,
+            8 => Key::Num8,
+            9 => Key::Num9,
+            10 => Key::A,
+            11 => Key::B,
+            12 => Key::C,
+            13 => Key::D,
+            14 => Key::E,
+            15 => Key::F,
+            16 => Key::Exit, // XXX This should probably fail => TryInto
+            _ => panic!("Invalid u8 -> Key"),
+        }
+    }
+}
+
 pub struct Keyboard {
     event_pump: sdl2::EventPump,
 }
