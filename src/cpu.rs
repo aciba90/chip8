@@ -44,8 +44,8 @@ pub struct Cpu {
     pc: usize, // Required u16, but usize for ease of indexing
     sp: usize, // Required u8, but usize for ease of indexing
 
-    _delay_timer: u8,
-    _sound_timer: u8,
+    delay_timer: u8,
+    sound_timer: u8,
     // I/O
     // keyboard: Keyboard
 }
@@ -59,8 +59,8 @@ impl Default for Cpu {
             vram_changed: false,
             v: [0; 16],
             i: 0,
-            _delay_timer: 0,
-            _sound_timer: 0,
+            delay_timer: 0,
+            sound_timer: 0,
             pc: 0x200,
             sp: 0,
         }
@@ -89,6 +89,15 @@ impl Cpu {
 
     pub fn vram(&self) -> &[[bool; HEIGHT]; WIDTH] {
         &self.vram
+    }
+
+    pub fn decrease_timers(&mut self) {
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
+        }
     }
 
     pub fn tick(&mut self, pressed_keys: Vec<keyboard::Key>) {
@@ -127,7 +136,7 @@ impl Cpu {
             Instruction::Draw { x, y, n } => self.i_dxyn(&x, &y, &n),
             Instruction::Skpr { x } => self.i_ex9e(&x, pressed_keys),
             Instruction::Skup { x } => self.i_exa1(&x, pressed_keys),
-            Instruction::Moved { x } => self.i_fx07(x),
+            Instruction::Moved { x } => self.i_fx07(&x),
             Instruction::Keyd { x } => self.i_fx0a(&x, pressed_keys),
             Instruction::Loadd { x } => self.i_fx15(&x),
             Instruction::Loads { x } => self.i_fx18(&x),
@@ -148,11 +157,6 @@ impl Cpu {
 
 // instructions
 impl Cpu {
-    #[allow(dead_code)]
-    fn i_sys(self) {
-        unimplemented!();
-    }
-
     /// 0x00E0 - CLS
     /// Clear the display.
     fn i_00e0(&mut self) -> Option<PC> {
@@ -338,8 +342,9 @@ impl Cpu {
         None
     }
 
-    fn i_bnnn(&mut self, _nnn: u16) -> Option<PC> {
-        todo!()
+    /// Jump to address NNN + V0
+    fn i_bnnn(&mut self, nnn: u16) -> Option<PC> {
+        Some(PC::Jump(nnn + self.v[0] as u16))
     }
 
     /// Set VX to a random number with a mask of kk
@@ -410,8 +415,10 @@ impl Cpu {
         }
     }
 
-    fn i_fx07(&mut self, _x: u8) -> Option<PC> {
-        todo!()
+    /// Store the current value of the delay timer in register VX
+    fn i_fx07(&mut self, x: &u8) -> Option<PC> {
+        self.v[*x as usize] = self.delay_timer;
+        None
     }
 
     /// Fx0A - LD Vx, K
@@ -431,22 +438,21 @@ impl Cpu {
         }
     }
 
-    /// Add the value stored in register VX to register I
+    /// Set the delay timer to the value of register VX
     fn i_fx15(&mut self, x: &u8) -> Option<PC> {
-        self.i = self.i.wrapping_add(self.v[*x as usize] as u16);
+        self.delay_timer = self.v[*x as usize];
         None
     }
 
-    fn i_fx18(&mut self, _x: &u8) -> Option<PC> {
-        todo!()
+    /// Set the sound timer to the value of register VX
+    fn i_fx18(&mut self, x: &u8) -> Option<PC> {
+        self.sound_timer = self.v[*x as usize];
+        None
     }
 
-    /// Fx1E - ADD I, Vx
-    /// Set I = I + Vx.
-    ///
-    /// The values of I and Vx are added, and the results are stored in I.
+    /// Add the value stored in register VX to register I
     fn i_fx1e(&mut self, x: &u8) -> Option<PC> {
-        self.i += self.v[*x as usize] as u16;
+        self.i = self.i.wrapping_add(self.v[*x as usize] as u16);
         None
     }
 

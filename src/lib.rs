@@ -43,6 +43,7 @@ impl Chip8 {
                 };
             }
 
+            self.cpu.decrease_timers();
             self.cpu.tick(pressed_keys);
             if self.cpu.refresh_screen() {
                 self.screen.tick(self.cpu.vram());
