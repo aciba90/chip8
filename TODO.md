@@ -2,4 +2,5 @@
 
 - unit test instructions
 - error handling
-- print chip8 state to the console
+- print/debug chip8 state to the console
+- Fix key dance
